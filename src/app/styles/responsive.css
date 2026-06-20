@@ -1,0 +1,236 @@
+@media (max-width: 980px) {
+  .workspace {
+    grid-template-columns: 1fr;
+    height: auto;
+    overflow: visible;
+  }
+
+  .panel {
+    max-height: none;
+  }
+
+  .chat-panel {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+
+  .playlist-panel,
+  .chat-panel {
+    overflow: visible;
+  }
+
+  .curator-workbench {
+    grid-template-columns: 1fr;
+  }
+
+  .chat-panel .command-drawer,
+  .chat-panel .command-drawer[data-open="true"] {
+    grid-template-columns: 1fr;
+    position: static;
+  }
+
+  .chat-panel .command-shelf,
+  .chat-panel .command-drawer[data-open="true"] .command-shelf {
+    background: rgba(78, 231, 224, 0.035);
+    border: 1px solid rgba(78, 231, 224, 0.16);
+    border-radius: 10px;
+    display: grid;
+    grid-column: auto;
+    grid-row: auto;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    margin-right: 0;
+    padding: 0.55rem;
+    width: auto;
+  }
+
+  .chat-panel .drawer-panel,
+  .chat-panel .command-drawer[data-open="true"] .drawer-panel {
+    border-radius: 12px;
+    grid-column: auto;
+    grid-row: auto;
+    max-height: none;
+    margin-right: 0;
+    width: auto;
+  }
+
+}
+
+@media (max-width: 900px) {
+  .track-disclosure-copy {
+    align-items: flex-start;
+    grid-template-columns: 1fr;
+  }
+
+  .track-compact-meta {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 720px) {
+  .shell {
+    grid-template-rows: auto auto 1fr;
+  }
+
+  .topbar {
+    align-items: flex-start;
+    padding-inline: 0.9rem;
+  }
+
+  .brand-banner {
+    height: 3.6rem;
+    max-width: 54vw;
+  }
+
+  .brand {
+    padding-left: 0.75rem;
+  }
+
+  .terminal-status {
+    display: none;
+  }
+
+  .mobile-switcher {
+    display: flex;
+  }
+
+  .mobile-switcher button {
+    flex: 1;
+  }
+
+  .panel {
+    border-top: 0;
+    padding: 0.85rem;
+  }
+
+  .panel[data-mobile-active="false"] {
+    display: none;
+  }
+
+  .chat-panel {
+    border-top: 0;
+  }
+
+  .chat-panel .command-drawer {
+    margin-top: 0;
+  }
+
+  .chat-panel .command-shelf,
+  .chat-panel .command-drawer[data-open="true"] .command-shelf {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .chat-panel .command-shelf .shelf-tab[data-mode="history"] {
+    display: none;
+  }
+
+  .curator-workbench[data-mobile-mode="ask"] .command-drawer {
+    order: -1;
+  }
+
+  .curator-workbench[data-mobile-mode="ask"] .chat-primary-region {
+    order: 1;
+  }
+
+  .curator-workbench[data-mobile-mode="history"] .chat-primary-region {
+    display: none;
+  }
+
+  .curator-workbench[data-mobile-mode="history"] .command-shelf,
+  .curator-workbench[data-mobile-mode="history"] .command-drawer[data-open="true"] .command-shelf {
+    display: none;
+  }
+
+  .section-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .playlist-summary-actions,
+  .playlist-output-bar,
+  .playlist-tracks-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .track {
+    grid-template-columns: 1.8rem 1.75rem minmax(0, 1fr) auto;
+  }
+
+  .track-title {
+    display: grid;
+    gap: 0.1rem;
+  }
+
+  .track-actions {
+    grid-column: 4;
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 480px) {
+  .brand-lockup {
+    align-items: flex-start;
+    gap: 0.65rem;
+  }
+
+  .brand-banner {
+    height: 3rem;
+    max-width: 44vw;
+  }
+
+  .brand p {
+    font-size: 0.92rem;
+  }
+
+  .section {
+    padding: 0.85rem;
+  }
+
+  .command-shelf {
+    grid-template-columns: 1fr;
+  }
+
+  .issue-filter-row {
+    flex-direction: column;
+  }
+
+  .session-card,
+  .session-save-row {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+
+  .session-card {
+    flex-direction: column;
+  }
+
+  .session-actions {
+    width: 100%;
+  }
+
+  .session-actions button:first-child {
+    flex: 1;
+  }
+
+  .empty-state {
+    grid-template-columns: 1fr;
+  }
+
+  .empty-state img {
+    max-width: 7rem;
+  }
+
+  .undo-banner {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .playlist-output-actions {
+    width: 100%;
+  }
+
+  .dialog-actions {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+}

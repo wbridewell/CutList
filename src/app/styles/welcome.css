@@ -1,0 +1,70 @@
+.welcome-guide {
+  background: rgba(159, 230, 90, 0.055);
+  border: 1px solid rgba(159, 230, 90, 0.2);
+  border-radius: var(--radius);
+  color: var(--muted);
+  margin-bottom: 0.75rem;
+  padding: 0.75rem;
+}
+
+.welcome-guide summary {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem 0.75rem;
+}
+
+.welcome-guide summary span {
+  color: var(--green);
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.welcome-guide summary strong {
+  color: #ffe1a3;
+}
+
+.welcome-copy {
+  border-top: 1px solid rgba(159, 230, 90, 0.16);
+  margin-top: 0.7rem;
+  padding-top: 0.7rem;
+}
+
+.welcome-copy h2 {
+  color: #ffe1a3;
+  font-size: 1rem;
+  line-height: 1.2;
+  margin-bottom: 0.35rem;
+}
+
+.welcome-copy p {
+  color: var(--muted);
+  margin-bottom: 0;
+}
+
+.welcome-steps {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 0.7rem;
+}
+
+.welcome-steps div {
+  background: rgba(2, 4, 3, 0.42);
+  border: 1px solid rgba(78, 231, 224, 0.18);
+  border-radius: 8px;
+  display: grid;
+  gap: 0.18rem;
+  padding: 0.58rem 0.65rem;
+}
+
+.welcome-steps strong {
+  color: #d5ff94;
+}
+
+.welcome-steps span {
+  color: var(--muted);
+  font-size: 0.9rem;
+}

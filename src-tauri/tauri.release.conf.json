@@ -1,0 +1,7 @@
+{
+  "bundle": {
+    "resources": {
+      "../.desktop-runtime": ".desktop-runtime"
+    }
+  }
+}

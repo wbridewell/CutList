@@ -1,0 +1,52 @@
+{
+  "name": "the-cutlist",
+  "version": "0.1.0",
+  "license": "MIT",
+  "author": {
+    "name": "Will Bridewell",
+    "url": "https://github.com/wbridewell"
+  },
+  "private": true,
+  "scripts": {
+    "dev": "tauri dev",
+    "next:dev": "next dev",
+    "build": "npm run build:ui",
+    "build:dmg": "node scripts/build-macos-dmg.mjs",
+    "build:alpha": "zsh scripts/build-alpha-dmg.sh",
+    "build:ui": "TAURI_BUILD=1 next build",
+    "build:desktop-runtime": "node scripts/build-desktop-runtime.mjs",
+    "build:release-assets": "npm run build:ui && npm run build:desktop-runtime",
+    "first-run": "node scripts/first-run.mjs",
+    "start-alpha": "node scripts/first-run.mjs --start-alpha",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "CUTLIST_RELEASE_PACKAGING=1 tauri build --bundles app --config src-tauri/tauri.release.conf.json",
+    "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
+    "lint": "npm run typecheck",
+    "prompt:harness": "vitest run --config vitest.prompt-harness.config.ts --reporter=dot",
+    "eval:cross-cutting": "vitest run --config vitest.cross-cutting-eval.config.ts --reporter=dot",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.9.0",
+    "next": "^15.5.18",
+    "openai": "4.103.0",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "server-only": "0.0.1",
+    "zod": "3.25.28"
+  },
+  "overrides": {
+    "postcss": "8.5.15"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.9.0",
+    "@testing-library/react": "16.3.0",
+    "@types/node": "22.15.21",
+    "@types/react": "19.0.12",
+    "@types/react-dom": "19.0.4",
+    "tsx": "^4.20.6",
+    "typescript": "5.8.3",
+    "vitest": "^4.1.8"
+  }
+}

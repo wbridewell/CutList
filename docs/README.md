@@ -1,0 +1,18 @@
+# Documentation
+
+- [Usage](USAGE.md)
+- [First-run alpha](FIRST_RUN_ALPHA.md)
+- [Product strategy](PRODUCT_STRATEGY.md)
+- [Product roadmap (2026-06-13)](ROADMAP_2026-06-13.md)
+- [Design](DESIGN.md)
+- [Architecture](ARCHITECTURE.md)
+- [Tech stack](TECH_STACK.md)
+- [Security implementation notes](SECURITY.md)
+- [Transformation review roadmap](TRANSFORMATION_REVIEW_ROADMAP.md)
+- [Development](DEVELOPMENT.md)
+- [Visual QA checklist](VISUAL_QA_CHECKLIST.md)
+- [Gemini API guide](GEMINI.md)
+- [Deployment](DEPLOYMENT.md)
+- [Tauri desktop alpha](DESKTOP_TAURI.md)
+- [macOS DMG alpha](MACOS_DMG_ALPHA.md)
+- [LLM agent orientation](llm/PROJECT_ORIENTATION.md)
