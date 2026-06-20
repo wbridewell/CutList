@@ -28,7 +28,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2.9.0",
+    "@tauri-apps/api": "^2.11.1",
     "next": "^15.5.18",
     "openai": "4.103.0",
     "react": "19.0.0",
