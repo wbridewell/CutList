@@ -73,7 +73,7 @@ Curator personality is now selected in-app from `Curator persona` next to `LLM s
 - `npm run lint`: currently aliases type checking.
 - `npm run build`: build the static frontend used by the desktop app.
 - `npm run build:desktop-runtime`: stage the compiled trusted backend runtime.
-- `npm run build:dmg`: build the macOS DMG release artifact. This is release packaging, not the normal development build, and it requires `CUTLIST_NODE_RUNTIME_PATH`.
+- `npm run build:dmg`: build the macOS DMG release artifact. This is release packaging, not the normal development build. It uses the bundled portable Node when available; set `CUTLIST_NODE_RUNTIME_PATH` only to override it.
 
 ## Common Workflows
 

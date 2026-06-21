@@ -114,7 +114,7 @@ npm run build:dmg
 `npm run dev` starts the full Tauri desktop app.
 `npm run next:dev` starts only the embedded Next.js UI.
 `npm run build` builds the static frontend used by the desktop app.
-`npm run build:dmg` is macOS release packaging and requires `CUTLIST_NODE_RUNTIME_PATH` to point at a portable standalone Node binary.
+`npm run build:dmg` builds the macOS release DMG and bundled desktop runtime. It uses the bundled portable Node when available; set `CUTLIST_NODE_RUNTIME_PATH` only when you need to provide a different standalone macOS Node binary.
 
 `npm run lint` currently aliases the TypeScript check because this prototype has not added an ESLint configuration yet.
 

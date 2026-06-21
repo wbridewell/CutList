@@ -111,12 +111,17 @@ export function PlaylistPanel({
     }
   }
 
-  function dropTrack(targetTrackId: string) {
-    if (!draggedTrackId) {
+  function dropTrack(targetTrackId: string | undefined) {
+    if (!draggedTrackId || !targetTrackId) {
+      cancelDrag();
       return;
     }
     const fromIndex = playlist.tracks.findIndex((track) => track.id === draggedTrackId);
     const toIndex = playlist.tracks.findIndex((track) => track.id === targetTrackId);
+    if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) {
+      cancelDrag();
+      return;
+    }
     onPlaylistChange(reorderTrackInPlaylist(playlist, fromIndex, toIndex));
     cancelDrag();
   }
@@ -373,9 +378,9 @@ export function PlaylistPanel({
               constraintViolationMessages={constraintPresentation.violationMessagesByTrackId.get(track.id) ?? []}
               expanded={expandedTrackId === track.id}
               onDragCancel={cancelDrag}
-              onDragOver={() => previewDropTarget(track.id)}
+              onDragOver={previewDropTarget}
               onDragStart={() => dragTrack(track.id)}
-              onDrop={() => dropTrack(track.id)}
+              onDrop={dropTrack}
               onRemove={() => removeTrack(track.id)}
               onToggleExpand={() => setExpandedTrackId(expandedTrackId === track.id ? null : track.id)}
             />

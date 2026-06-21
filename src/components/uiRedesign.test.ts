@@ -321,6 +321,8 @@ describe("UI redesign behavior", () => {
 
     expect(html).toContain("Show details for Haunted Test");
     expect(html).toContain("Drag to reorder");
+    expect(html).toContain("type=\"button\"");
+    expect(html).not.toContain("draggable=");
     expect(html).toContain("aria-label=\"Remove Haunted Test\"");
     expect(html).toContain("×");
     expect(html).not.toContain(">Remove<");

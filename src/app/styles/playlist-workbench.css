@@ -659,6 +659,7 @@
 
 .drag-handle {
   align-items: center;
+  appearance: none;
   background: rgba(78, 231, 224, 0.06);
   border: 1px solid rgba(78, 231, 224, 0.28);
   border-radius: 8px;
@@ -671,6 +672,8 @@
   min-width: 1.65rem;
   padding: 0;
   place-self: start center;
+  touch-action: none;
+  user-select: none;
 }
 
 .drag-handle:active {

@@ -17,8 +17,10 @@ npm run build
 If you are preparing the macOS handoff artifact instead of the normal frontend build, use:
 
 ```bash
-CUTLIST_NODE_RUNTIME_PATH=/absolute/path/to/node npm run build:dmg
+npm run build:dmg
 ```
+
+The DMG build uses the bundled portable Node when available. Set `CUTLIST_NODE_RUNTIME_PATH=/absolute/path/to/node` only when overriding it.
 
 ## Runtime Requirements
 

@@ -29,7 +29,7 @@ npm run build:dmg
 ```
 
 `npm run build` builds the static frontend.
-`npm run build:dmg` is the macOS release-packaging path and requires `CUTLIST_NODE_RUNTIME_PATH`.
+`npm run build:dmg` is the macOS release-packaging path. It uses the bundled portable Node when available; set `CUTLIST_NODE_RUNTIME_PATH` only to override it.
 
 Update documentation when behavior, commands, configuration, architecture, or security assumptions change.
 

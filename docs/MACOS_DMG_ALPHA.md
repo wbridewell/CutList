@@ -51,7 +51,7 @@ The release build is the single packaging entry point:
 npm run build:dmg
 ```
 
-Release packaging now requires `CUTLIST_NODE_RUNTIME_PATH`. Point it at a standalone macOS Node binary before building. The staging script now fails fast instead of bundling a non-portable runtime.
+Release packaging uses the bundled portable Node when available. Set `CUTLIST_NODE_RUNTIME_PATH` only when you need to override it with a different standalone macOS Node binary. The staging script fails fast instead of bundling a non-portable runtime.
 
 That command must keep doing all four jobs together:
 

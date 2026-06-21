@@ -10,7 +10,7 @@ Use this before making the repository public or tagging a release.
 - Run `npm run typecheck`.
 - Run `npm run test`.
 - Run `npm run build`.
-- If you are sending a macOS DMG, run `CUTLIST_NODE_RUNTIME_PATH=/absolute/path/to/node npm run build:dmg`.
+- If you are sending a macOS DMG, run `npm run build:dmg`. Set `CUTLIST_NODE_RUNTIME_PATH=/absolute/path/to/node` only when overriding the bundled portable Node.
 - Confirm no `.env*` files, logs, or generated build artifacts are tracked.
 - Search for secrets before publishing.
 - Confirm docs match current commands, architecture, routes, and environment variables.

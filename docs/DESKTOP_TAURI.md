@@ -30,7 +30,7 @@ npm run build:dmg
 ```
 
 `npm run build` builds the static frontend used by the desktop app.
-`npm run build:dmg` stages `.desktop-runtime/` before Tauri bundles the app and creates the macOS DMG. This release path requires `CUTLIST_NODE_RUNTIME_PATH` to point at a portable standalone Node binary. The production app no longer depends on the repository checkout, local `node_modules`, or a globally installed Node runtime on the target machine.
+`npm run build:dmg` stages `.desktop-runtime/` before Tauri bundles the app and creates the macOS DMG. It uses the bundled portable Node when available; set `CUTLIST_NODE_RUNTIME_PATH` only to override it with a different standalone macOS Node binary. The production app no longer depends on the repository checkout, local `node_modules`, or a globally installed Node runtime on the target machine.
 
 ## LLM Setup
 

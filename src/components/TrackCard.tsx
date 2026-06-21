@@ -1,5 +1,6 @@
 "use client";
 
+import type { PointerEvent } from "react";
 import type { Track } from "@/types/playlist";
 
 type Props = {
@@ -10,9 +11,9 @@ type Props = {
   track: Track;
   index: number;
   onDragCancel: () => void;
-  onDragOver: () => void;
+  onDragOver: (trackId: string) => void;
   onDragStart: () => void;
-  onDrop: () => void;
+  onDrop: (trackId?: string) => void;
   onRemove: () => void;
   onToggleExpand: () => void;
 };
@@ -47,36 +48,57 @@ export function TrackCard({
   onRemove,
   onToggleExpand
 }: Props) {
+  function trackIdAtPoint(event: PointerEvent): string | undefined {
+    return document
+      .elementFromPoint(event.clientX, event.clientY)
+      ?.closest<HTMLElement>(".track[data-track-id]")
+      ?.dataset.trackId;
+  }
+
   return (
     <div
       className="track"
       data-constraint-violating={constraintViolationMessages.length > 0}
       data-dragging={dragging}
       data-drop-target={dropTarget}
-      onDragOver={(event) => {
-        event.preventDefault();
-        onDragOver();
-      }}
-      onDrop={(event) => {
-        event.preventDefault();
-        onDrop();
-      }}
+      data-track-id={track.id}
     >
       <div className="track-index">{String(index + 1).padStart(2, "0")}</div>
-      <span
+      <button
+        type="button"
         className="drag-handle"
         aria-label={`Drag to reorder ${track.title}`}
-        draggable
-        onDragEnd={onDragCancel}
-        onDragStart={(event) => {
-          event.dataTransfer.effectAllowed = "move";
-          event.dataTransfer.setData("text/plain", track.id);
+        onPointerCancel={(event) => {
+          if (!event.currentTarget.hasPointerCapture(event.pointerId)) {
+            return;
+          }
+          onDragCancel();
+        }}
+        onPointerDown={(event) => {
+          event.currentTarget.setPointerCapture(event.pointerId);
+          event.preventDefault();
           onDragStart();
+        }}
+        onPointerMove={(event) => {
+          if (!event.currentTarget.hasPointerCapture(event.pointerId)) {
+            return;
+          }
+          const targetTrackId = trackIdAtPoint(event);
+          if (targetTrackId) {
+            onDragOver(targetTrackId);
+          }
+        }}
+        onPointerUp={(event) => {
+          if (!event.currentTarget.hasPointerCapture(event.pointerId)) {
+            return;
+          }
+          event.currentTarget.releasePointerCapture(event.pointerId);
+          onDrop(trackIdAtPoint(event));
         }}
         title="Drag to reorder"
       >
         <span aria-hidden="true">::</span>
-      </span>
+      </button>
       <div className="track-main">
         <button
           className="track-disclosure"

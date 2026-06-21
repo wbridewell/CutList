@@ -19,6 +19,7 @@ import ts from "typescript";
 const require = createRequire(import.meta.url);
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const root = resolve(scriptDir, "..");
+const defaultPortableNode = join(process.env.HOME ?? "", ".cache", "codex-runtimes", "codex-primary-runtime", "dependencies", "node", "bin", "node");
 const runtimeDir = join(root, ".desktop-runtime");
 const compiledRoot = join(runtimeDir, "app");
 const nodeModulesDir = join(runtimeDir, "node_modules");
@@ -285,9 +286,13 @@ export function resolveRuntimeNodeSourcePath(env = process.env, execPath = proce
     return resolve(explicitPath);
   }
 
+  if (existsSync(defaultPortableNode)) {
+    return defaultPortableNode;
+  }
+
   if (isReleasePackaging(env)) {
     throw new Error(
-      "Release desktop packaging requires CUTLIST_NODE_RUNTIME_PATH. Point it at a standalone macOS Node binary before running the build."
+      "Release desktop packaging needs a portable macOS Node binary. Set CUTLIST_NODE_RUNTIME_PATH because the bundled default was not found."
     );
   }
 
