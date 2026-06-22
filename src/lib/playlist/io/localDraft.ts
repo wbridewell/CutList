@@ -7,6 +7,7 @@ import {
 } from "@/lib/playlist/schemas";
 import type { CuratorResponse, PlaylistState } from "@/types/playlist";
 export {
+  createCuratorUndoHistoryEntry,
   createErrorHistoryEntry,
   createRequestHistoryEntry,
   type ChatMessage,
@@ -81,12 +82,14 @@ const RequestHistoryEntrySchema = z.object({
   acceptedCount: z.number().int().nonnegative(),
   rejectedCandidates: z.array(RejectedCandidateSchema),
   createdAt: z.string(),
-  kind: z.enum(["request", "seed", "import", "review", "manual-match", "error"]).optional(),
+  kind: z.enum(["request", "seed", "import", "review", "manual-match", "error", "undo"]).optional(),
   error: z.string().optional(),
   movedTrackCount: z.number().int().nonnegative().optional(),
   movedTrackSummary: z.array(z.string()).optional(),
   orderRationale: z.string().nullable().optional(),
   playlistAction: z.enum(["set", "add", "remove", "reorder"]).optional(),
+  playlistBefore: PlaylistStateSchema.optional(),
+  resultingPlaylistUpdatedAt: z.string().optional(),
   reviewSuggestions: z.array(ReviewSuggestionSchema).optional(),
   issueStatuses: z.array(HistoryIssueStatusSchema).optional()
 });

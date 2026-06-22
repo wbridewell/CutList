@@ -4,7 +4,9 @@ import type { ChatMessage } from "@/lib/playlist/collaboration";
 
 type Props = {
   busy?: boolean;
+  curatorUndoDescription?: string | null;
   messages: ChatMessage[];
+  onUndoCuratorTurn?: () => void;
   progressStatus?: string | null;
 };
 
@@ -24,7 +26,13 @@ export function latestActiveExchange(messages: ChatMessage[]): Exchange {
   };
 }
 
-export function ActiveExchange({ busy = false, messages, progressStatus }: Props) {
+export function ActiveExchange({
+  busy = false,
+  curatorUndoDescription = null,
+  messages,
+  onUndoCuratorTurn,
+  progressStatus
+}: Props) {
   const { assistantMessage, userMessage } = latestActiveExchange(messages);
 
   return (
@@ -46,6 +54,14 @@ export function ActiveExchange({ busy = false, messages, progressStatus }: Props
         ) : null}
         {assistantMessage ? <div className="exchange-bubble assistant">{assistantMessage.content}</div> : null}
       </div>
+      {curatorUndoDescription && onUndoCuratorTurn ? (
+        <div className="undo-banner undo-banner-subtle" role="status">
+          <span>{curatorUndoDescription}</span>
+          <button className="button-secondary button-compact" type="button" onClick={onUndoCuratorTurn}>
+            Undo last curator turn
+          </button>
+        </div>
+      ) : null}
     </section>
   );
 }

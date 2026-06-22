@@ -16,7 +16,7 @@ export type ChatMessage = {
   content: string;
 };
 
-export type RequestHistoryKind = "request" | "seed" | "import" | "review" | "manual-match" | "error";
+export type RequestHistoryKind = "request" | "seed" | "import" | "review" | "manual-match" | "error" | "undo";
 
 export type HistoryIssueKind = "rejected_candidate" | "review_suggestion";
 export type RejectedCandidateIssueStatus = "rejected" | "accepted" | "dismissed" | "blocked";
@@ -43,13 +43,16 @@ export type RequestHistoryEntry = {
   movedTrackSummary?: string[];
   orderRationale?: string | null;
   playlistAction?: NonNullable<CuratorResponse["playlistUpdate"]>["action"];
+  playlistBefore?: PlaylistState;
+  resultingPlaylistUpdatedAt?: string;
   reviewSuggestions?: ReviewSuggestion[];
   issueStatuses?: HistoryIssueStatus[];
 };
 
 type RequestHistoryOptions = {
   createdAt?: string;
-  playlistBefore?: Pick<PlaylistState, "tracks">;
+  playlistBefore?: PlaylistState;
+  resultingPlaylistUpdatedAt?: string;
 };
 
 export function createCollaborationId(createdAt = new Date().toISOString()): string {
@@ -79,6 +82,8 @@ export function createRequestHistoryEntry(
     movedTrackSummary: reorderSummary?.movedTrackSummary,
     orderRationale: response.playlistUpdate?.action === "reorder" ? response.playlistUpdate.orderRationale : null,
     playlistAction: response.playlistUpdate?.action,
+    playlistBefore: typeof options === "string" ? undefined : options.playlistBefore,
+    resultingPlaylistUpdatedAt: typeof options === "string" ? undefined : options.resultingPlaylistUpdatedAt,
     issueStatuses: createRejectedCandidateIssueStatuses(response.rejectedCandidates)
   };
 }
@@ -172,6 +177,22 @@ export function createManualMatchHistoryEntry(
     rejectedCandidates: [],
     createdAt: timestamp,
     kind: "manual-match",
+    issueStatuses: []
+  };
+}
+
+export function createCuratorUndoHistoryEntry(
+  assistantMessage = "Undid the last curator turn. Restored the previous playlist state.",
+  createdAt = new Date().toISOString()
+): RequestHistoryEntry {
+  return {
+    id: createCollaborationId(createdAt),
+    userMessage: "Undo last curator turn",
+    assistantMessage,
+    acceptedCount: 0,
+    rejectedCandidates: [],
+    createdAt,
+    kind: "undo",
     issueStatuses: []
   };
 }

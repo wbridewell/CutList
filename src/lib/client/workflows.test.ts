@@ -168,7 +168,13 @@ describe("client workflows", () => {
       { role: "assistant", content: "Added one.\n\nRejected Nope - Rejected: No confident metadata match. Won't be suggested again in this session." }
     ]);
     expect((sentInput as PlaylistMessageRequest | null)?.conversationContext?.recentMessages).toEqual(priorMessages);
-    expect(result.historyEntry).toMatchObject({ kind: "request", acceptedCount: 1, playlistAction: "add" });
+    expect(result.historyEntry).toMatchObject({
+      kind: "request",
+      acceptedCount: 1,
+      playlistAction: "add",
+      playlistBefore: base
+    });
+    expect(result.historyEntry?.resultingPlaylistUpdatedAt).toBe(result.nextPlaylist?.updatedAt);
   });
 
   it("turns curator request errors into assistant and history results", async () => {
@@ -184,6 +190,28 @@ describe("client workflows", () => {
 
     expect(result.messages[1]).toEqual({ role: "assistant", content: "Stopped." });
     expect(result.historyEntry).toMatchObject({ kind: "error", error: "Stopped." });
+  });
+
+  it("does not record curator undo snapshot data for no-op curator responses", async () => {
+    const base = playlist([track({ id: "itunes:1", sourceId: "1", title: "First" })]);
+    const result = await runCuratorRequestWorkflow(
+      { messages: [], outgoing: "Thoughts?", playlist: base },
+      {
+        onProgress: () => undefined,
+        sendMessage: async () => ({
+          message: "No safe change to apply.",
+          playlistUpdate: null,
+          playlistMeta: null,
+          updatedConstraints: undefined,
+          constraintReport: { passed: true, totalDurationMs: 180000, violations: [] },
+          rejectedCandidates: []
+        })
+      }
+    );
+
+    expect(result.nextPlaylist).toBeUndefined();
+    expect(result.historyEntry?.playlistBefore).toBeUndefined();
+    expect(result.historyEntry?.resultingPlaylistUpdatedAt).toBeUndefined();
   });
 
   it("verifies seeds and keeps parse failures inside workflow results", async () => {

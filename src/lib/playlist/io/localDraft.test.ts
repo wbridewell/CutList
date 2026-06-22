@@ -267,4 +267,38 @@ describe("request history entries", () => {
     expect(draft?.history[0].reviewSuggestions?.[0].id).toBe("review-suggestion-1");
     expect(draft?.history[0].issueStatuses?.[0].status).toBe("ignored");
   });
+
+  it("round-trips playlist snapshots for curator undo through draft persistence", () => {
+    const history: RequestHistoryEntry[] = [{
+      id: "history-request-1",
+      userMessage: "Reorder this.",
+      assistantMessage: "Done.",
+      acceptedCount: 0,
+      rejectedCandidates: [],
+      createdAt: "2026-05-27T00:00:05Z",
+      kind: "request",
+      playlistAction: "reorder",
+      playlistBefore: {
+        ...playlist,
+        title: "Before",
+        tracks: [track]
+      },
+      resultingPlaylistUpdatedAt: "2026-05-27T00:00:06Z"
+    }];
+
+    const draft = parseLocalDraft(serializeLocalDraft({
+      playlist: {
+        ...playlist,
+        title: "After",
+        updatedAt: "2026-05-27T00:00:06Z"
+      },
+      messages,
+      history,
+      savedAt: "2026-05-27T00:00:07Z"
+    }));
+
+    expect(draft?.history[0].playlistBefore?.title).toBe("Before");
+    expect(draft?.history[0].playlistBefore?.tracks[0]?.title).toBe("Song");
+    expect(draft?.history[0].resultingPlaylistUpdatedAt).toBe("2026-05-27T00:00:06Z");
+  });
 });

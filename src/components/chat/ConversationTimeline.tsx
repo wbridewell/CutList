@@ -43,6 +43,8 @@ function entryTitle(entry: RequestHistoryEntry): string {
       return entry.userMessage === "Accepted recommended match" ? "Accepted recommended match" : "Accepted reviewed match";
     case "error":
       return "Request failed";
+    case "undo":
+      return "Undid curator turn";
     case "request":
     default:
       return "Asked for tracks";

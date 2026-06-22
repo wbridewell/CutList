@@ -39,12 +39,29 @@ type Props = {
   onResetDraft: () => void;
 };
 
+type PlaylistUndoRevisionState = {
+  armedUpdatedAt: string | null;
+  sourceUpdatedAt: string;
+};
+
 function pluralizeTrack(count: number): string {
   return `${count} flagged track${count === 1 ? "" : "s"}`;
 }
 
 function pluralizeWarning(count: number): string {
   return `${count} evidence warning${count === 1 ? "" : "s"}`;
+}
+
+export function advancePlaylistUndoRevisionState(
+  state: PlaylistUndoRevisionState,
+  playlistUpdatedAt: string
+): PlaylistUndoRevisionState | null {
+  if (state.armedUpdatedAt == null) {
+    return playlistUpdatedAt === state.sourceUpdatedAt
+      ? state
+      : { ...state, armedUpdatedAt: playlistUpdatedAt };
+  }
+  return playlistUpdatedAt === state.armedUpdatedAt ? state : null;
 }
 
 export function PlaylistPanel({
@@ -61,11 +78,27 @@ export function PlaylistPanel({
   const [detailsInspectorOpen, setDetailsInspectorOpen] = useState(false);
   const [outputsInspectorOpen, setOutputsInspectorOpen] = useState(false);
   const [undoPayload, setUndoPayload] = useState<PlaylistOperationUndoPayload | null>(null);
+  const [undoRevisionState, setUndoRevisionState] = useState<PlaylistUndoRevisionState | null>(null);
   const [draggedTrackId, setDraggedTrackId] = useState<string | null>(null);
   const [dropTargetTrackId, setDropTargetTrackId] = useState<string | null>(null);
   const [selectedFormat, setSelectedFormat] = useState<PlaylistExportFormat>("migration_csv");
   const [lastExportPath, setLastExportPath] = useState<string | null>(null);
   const [outputStatus, setOutputStatus] = useState<{ tone: "ok" | "bad"; message: string } | null>(null);
+
+  useEffect(() => {
+    if (!undoPayload || !undoRevisionState) {
+      return;
+    }
+    const nextState = advancePlaylistUndoRevisionState(undoRevisionState, playlist.updatedAt);
+    if (nextState) {
+      if (nextState !== undoRevisionState) {
+        setUndoRevisionState(nextState);
+      }
+      return;
+    }
+    setUndoPayload(null);
+    setUndoRevisionState(null);
+  }, [playlist.updatedAt, undoPayload, undoRevisionState]);
 
   function selectedFormatLabel(): string {
     return exportFormatRegistry.find((format) => format.id === selectedFormat)?.label ?? "Export";
@@ -137,6 +170,7 @@ export function PlaylistPanel({
       return;
     }
     setUndoPayload(payload);
+    setUndoRevisionState({ armedUpdatedAt: null, sourceUpdatedAt: playlist.updatedAt });
     onPlaylistChange(removeTrackFromPlaylist(playlist, trackId));
   }
 
@@ -146,6 +180,7 @@ export function PlaylistPanel({
     }
     onPlaylistChange(applyPlaylistOperationUndo(playlist, undoPayload, nowIso()));
     setUndoPayload(null);
+    setUndoRevisionState(null);
   }
 
   function removeConstraintViolatingTracks() {
@@ -160,6 +195,7 @@ export function PlaylistPanel({
     }
 
     setUndoPayload(payload);
+    setUndoRevisionState({ armedUpdatedAt: null, sourceUpdatedAt: playlist.updatedAt });
     if (payload.operationId === "remove") {
       onPlaylistChange(removeTracksFromPlaylist(playlist, payload.removedTracks.map((item) => item.track.id)));
     }
@@ -168,6 +204,7 @@ export function PlaylistPanel({
   function confirmResetDraft() {
     setConfirmResetOpen(false);
     setUndoPayload(null);
+    setUndoRevisionState(null);
     setExpandedTrackId(null);
     setDetailsInspectorOpen(false);
     setOutputsInspectorOpen(false);

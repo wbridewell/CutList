@@ -162,6 +162,35 @@ describe("UI redesign behavior", () => {
     expect(html).not.toContain("All verified");
   });
 
+  it("renders curator-turn undo next to the latest response when available", () => {
+    const html = renderToStaticMarkup(React.createElement(ActiveExchange, {
+      busy: false,
+      curatorUndoDescription: "Restore the playlist state from before the most recent curator-applied turn.",
+      messages: [
+        { role: "user", content: "Reorder this." },
+        { role: "assistant", content: "Done." }
+      ],
+      onUndoCuratorTurn: () => undefined,
+      progressStatus: null
+    }));
+
+    expect(html).toContain("Restore the playlist state from before the most recent curator-applied turn.");
+    expect(html).toContain("Undo last curator turn");
+  });
+
+  it("does not render curator-turn undo when no undoable curator state exists", () => {
+    const html = renderToStaticMarkup(React.createElement(ActiveExchange, {
+      busy: false,
+      messages: [
+        { role: "user", content: "Review this." },
+        { role: "assistant", content: "Needs work." }
+      ],
+      progressStatus: null
+    }));
+
+    expect(html).not.toContain("Undo last curator turn");
+  });
+
   it("renders a first-run welcome guide with clear starting paths", () => {
     const html = renderToStaticMarkup(React.createElement(WelcomeGuide));
 

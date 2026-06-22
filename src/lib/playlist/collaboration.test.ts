@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  createCuratorUndoHistoryEntry,
   createReviewSuggestionIssueStatuses,
   createErrorHistoryEntry,
   createImportHistoryEntry,
@@ -87,6 +88,7 @@ describe("collaboration helpers", () => {
     };
     const review = createPlaylistReviewHistoryEntry("Strong opener.", reviewData, "review-time");
     const manual = createManualMatchHistoryEntry(track, "manual-time");
+    const undo = createCuratorUndoHistoryEntry(undefined, "undo-time");
 
     expect(imported).toMatchObject({
       userMessage: "Import and verify",
@@ -114,6 +116,12 @@ describe("collaboration helpers", () => {
       assistantMessage: "Added Artist - Song.",
       acceptedCount: 1,
       kind: "manual-match"
+    });
+    expect(undo).toMatchObject({
+      userMessage: "Undo last curator turn",
+      acceptedCount: 0,
+      kind: "undo",
+      createdAt: "undo-time"
     });
   });
 

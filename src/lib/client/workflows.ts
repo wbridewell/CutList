@@ -93,6 +93,12 @@ export function createCompletedRequestMessages(requestMessages: ChatMessage[], a
   return [...requestMessages, { role: "assistant", content: assistantMessage }];
 }
 
+export function playlistChangedMeaningfully(before: PlaylistState, after: PlaylistState): boolean {
+  const { updatedAt: _beforeUpdatedAt, ...beforeComparable } = before;
+  const { updatedAt: _afterUpdatedAt, ...afterComparable } = after;
+  return JSON.stringify(beforeComparable) !== JSON.stringify(afterComparable);
+}
+
 export function buildConversationContext(messages: ChatMessage[]): ConversationContext | undefined {
   const recentMessages = messages
     .map((message) => ({
@@ -190,15 +196,24 @@ export async function runCuratorRequestWorkflow(
       },
       { onProgress: dependencies.onProgress, signal: dependencies.signal }
     );
+    const nextPlaylist = data.playlistUpdate || data.updatedConstraints || data.playlistMeta
+      ? applyCuratorResponse(input.playlist, data)
+      : undefined;
     const assistantContent = composeCuratorAssistantMessage(data, input.playlist);
+    const historyEntry = createRequestHistoryEntry(
+      input.outgoing,
+      data.message,
+      data,
+      nextPlaylist && playlistChangedMeaningfully(input.playlist, nextPlaylist)
+        ? { playlistBefore: input.playlist, resultingPlaylistUpdatedAt: nextPlaylist.updatedAt }
+        : {}
+    );
     return {
       assistantMessage: { role: "assistant", content: assistantContent },
       data,
-      historyEntry: createRequestHistoryEntry(input.outgoing, data.message, data, { playlistBefore: input.playlist }),
+      historyEntry,
       messages: createCompletedRequestMessages(requestMessages, assistantContent),
-      nextPlaylist: data.playlistUpdate || data.updatedConstraints || data.playlistMeta
-        ? applyCuratorResponse(input.playlist, data)
-        : undefined
+      nextPlaylist
     };
   } catch (error) {
     const failure = workflowErrorResult(input.outgoing, error, "Something went wrong.");

@@ -8,7 +8,6 @@ import { NaturalRequestForm } from "@/components/chat/NaturalRequestForm";
 import { WelcomeGuide } from "@/components/WelcomeGuide";
 import {
   appCommandIds,
-  dispatchAppCommand,
   registerAppCommand
 } from "@/lib/client/appCommands";
 import type { CuratorPersona } from "@/lib/client/llmSetupApi";
@@ -17,6 +16,7 @@ import {
   applyVerifiedReviewSuggestionResponse,
   applyReviewSuggestionWorkflow,
   createRequestMessageList,
+  playlistChangedMeaningfully,
   promptForReviewSuggestion,
   runAnalyzeWorkflow,
   runCuratorRequestWorkflow,
@@ -25,6 +25,7 @@ import {
   type ClientWorkflowResult
 } from "@/lib/client/workflows";
 import {
+  createCuratorUndoHistoryEntry,
   rejectedCandidateSiblingIssueIds,
   updateHistoryIssueStatuses,
   type ChatMessage,
@@ -38,7 +39,7 @@ import {
   type PlaylistOperationUndoPayload
 } from "@/lib/playlist/operations";
 import { parseDiscoveryRadiusOverride } from "@/lib/playlist/discoveryRadius";
-import { nowIso, updatePlaylistDiscoveryRadius } from "@/lib/playlist/state";
+import { nowIso, touchPlaylist, updatePlaylistDiscoveryRadius } from "@/lib/playlist/state";
 import type { AnalyzePlaylistResponse, AttemptedMatch, PlaylistState, ReviewSuggestion } from "@/types/playlist";
 
 export { createCompletedRequestMessages, createRequestMessageList } from "@/lib/client/workflows";
@@ -55,6 +56,30 @@ export function shouldClearStaleReviewState(
     return history.length === 0;
   }
   return !history.some((entry) => entry.id === activeReviewEntryId);
+}
+
+type CuratorTurnUndoState = {
+  expectedUpdatedAt: string;
+  previousPlaylist: PlaylistState;
+  sourceEntryId: string;
+};
+
+export function restoreCuratorTurnUndoState(
+  history: RequestHistoryEntry[],
+  playlist: PlaylistState
+): CuratorTurnUndoState | null {
+  for (let index = history.length - 1; index >= 0; index -= 1) {
+    const entry = history[index];
+    if (entry?.kind !== "request" || !entry.playlistBefore || entry.resultingPlaylistUpdatedAt !== playlist.updatedAt) {
+      continue;
+    }
+    return {
+      expectedUpdatedAt: playlist.updatedAt,
+      previousPlaylist: entry.playlistBefore,
+      sourceEntryId: entry.id
+    };
+  }
+  return null;
 }
 
 type Props = {
@@ -115,6 +140,7 @@ export function ChatPanel({
   const [ignoredSuggestionIds, setIgnoredSuggestionIds] = useState<Set<string>>(new Set());
   const [sentSuggestionIds, setSentSuggestionIds] = useState<Set<string>>(new Set());
   const [reviewUndoPayload, setReviewUndoPayload] = useState<PlaylistOperationUndoPayload | null>(null);
+  const [curatorTurnUndoState, setCuratorTurnUndoState] = useState<CuratorTurnUndoState | null>(null);
   const autoOpenIssuesRef = useRef(true);
   const latestRejectedEntry = [...history].reverse().find((entry) => entry.rejectedCandidates.length > 0) ?? null;
   const discoveryRadiusOverride = parseDiscoveryRadiusOverride(userMessage);
@@ -232,6 +258,23 @@ export function ChatPanel({
     setSentSuggestionIds(new Set());
     setReviewUndoPayload(null);
   }, [activeReview, activeReviewEntryId, history]);
+
+  useEffect(() => {
+    if (!curatorTurnUndoState) {
+      const restored = restoreCuratorTurnUndoState(history, playlist);
+      if (restored) {
+        setCuratorTurnUndoState(restored);
+      }
+      return;
+    }
+    if (!history.some((entry) => entry.id === curatorTurnUndoState.sourceEntryId)) {
+      setCuratorTurnUndoState(null);
+      return;
+    }
+    if (playlist.updatedAt !== curatorTurnUndoState.expectedUpdatedAt) {
+      setCuratorTurnUndoState(null);
+    }
+  }, [curatorTurnUndoState, history, playlist]);
 
   useEffect(() => {
     return registerAppCommand(appCommandIds.toggleSidebar, () => {
@@ -358,13 +401,28 @@ export function ChatPanel({
       const nextPlaylist = result.data && options.reviewSuggestion
         ? applyVerifiedReviewSuggestionResponse(playlistForComposer, options.reviewSuggestion, result.data)
         : result.nextPlaylist;
+      const changed = nextPlaylist ? playlistChangedMeaningfully(playlistForComposer, nextPlaylist) : false;
+      const historyEntry = options.reviewSuggestion && result.historyEntry && nextPlaylist && changed
+        ? {
+          ...result.historyEntry,
+          playlistBefore: playlistForComposer,
+          resultingPlaylistUpdatedAt: nextPlaylist.updatedAt
+        }
+        : result.historyEntry;
       if (nextPlaylist) {
         onPlaylistChange(nextPlaylist);
       }
       onMessagesChange(result.messages);
-      if (result.historyEntry) {
-        appendHistory(result.historyEntry);
-        maybeAutoOpenIssues(result.historyEntry);
+      if (historyEntry) {
+        appendHistory(historyEntry);
+        maybeAutoOpenIssues(historyEntry);
+      }
+      if (historyEntry?.kind === "request" && historyEntry.playlistBefore && nextPlaylist && changed) {
+        setCuratorTurnUndoState({
+          expectedUpdatedAt: nextPlaylist.updatedAt,
+          previousPlaylist: historyEntry.playlistBefore,
+          sourceEntryId: historyEntry.id
+        });
       }
     } finally {
       setBusy(false);
@@ -414,6 +472,17 @@ export function ChatPanel({
     }
     onPlaylistChange(applyPlaylistOperationUndo(playlist, reviewUndoPayload, nowIso()));
     setReviewUndoPayload(null);
+  }
+
+  function undoLastCuratorTurn() {
+    if (!curatorTurnUndoState) {
+      return;
+    }
+    const assistantMessage = "Undid the last curator turn. Restored the previous playlist state.";
+    onPlaylistChange(touchPlaylist(curatorTurnUndoState.previousPlaylist, nowIso()));
+    setCuratorTurnUndoState(null);
+    appendMessage({ role: "assistant", content: assistantMessage });
+    appendHistory(createCuratorUndoHistoryEntry(assistantMessage));
   }
 
   async function sendMessage() {
@@ -502,7 +571,13 @@ export function ChatPanel({
               onUserMessageChange={setUserMessage}
             />
             <div className="latest-response-region">
-              <ActiveExchange busy={busy} messages={messages} progressStatus={progressStatus} />
+              <ActiveExchange
+                busy={busy}
+                curatorUndoDescription={curatorTurnUndoState ? "Restore the playlist state from before the most recent curator-applied turn." : null}
+                messages={messages}
+                onUndoCuratorTurn={curatorTurnUndoState ? undoLastCuratorTurn : undefined}
+                progressStatus={progressStatus}
+              />
             </div>
           </div>
         </div>
