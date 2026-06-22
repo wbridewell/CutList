@@ -295,6 +295,9 @@ function containsAddIntent(text: string): boolean {
   if (/\b(?:too|bit|little)\s+hard\s+to\s+find\b/i.test(text) || /\beasier\s+to\s+find\b/i.test(text)) {
     return false;
   }
+  if (/\b(?:without\b(?:.{0,40})?\badd(?:ing)?|not\s+add(?:ing)?|don't\s+add|do not\s+add|never\s+add)\b/i.test(text)) {
+    return false;
+  }
   return !isConstraintDeclaration(text) &&
     !isEditSuggestionRequest(text) && (
       /\b(?:add|adding|find|give me|recommend|suggest|fill|round out|build|pump|extend|grow)\b/i.test(text) ||
@@ -307,6 +310,9 @@ function containsReplaceIntent(text: string): boolean {
 }
 
 function containsRemoveIntent(text: string): boolean {
+  if (/\b(?:without\b(?:.{0,40})?\bremov(?:e|ing)|not\s+remov(?:e|ing)|don't\s+remove|do not\s+remove|never\s+remove)\b/i.test(text)) {
+    return false;
+  }
   return /\b(remove|removing|delete|drop|cut|cuts|prune|clear|trim)\b/i.test(text) || /\bget rid of\b/i.test(text);
 }
 
@@ -368,6 +374,7 @@ function emptyConstraintDraft(base: PlaylistConstraints = {}): PlaylistConstrain
     excludedArtists: [...(base.excludedArtists ?? [])],
     noMoreFromArtists: [...(base.noMoreFromArtists ?? [])],
     artistLimits: [...(base.artistLimits ?? [])],
+    requiredArtists: [...(base.requiredArtists ?? [])],
     requiredGenreAdditions: [...(base.requiredGenreAdditions ?? [])],
     excludedGenres: [...(base.excludedGenres ?? [])],
     noMoreFromGenres: [...(base.noMoreFromGenres ?? [])],
@@ -559,6 +566,16 @@ function extractConstraintsForScope(
   }
 
   for (const clause of splitOrderedClauses(text)) {
+    for (const match of clause.text.matchAll(/(?:add|adding|find|give me|recommend|suggest|include|bring in)\s+(?:me\s+)?(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|a|an|some|few|couple)?\s*(?:more\s+)?(?:songs?|tracks?)?\s*(?:by|from)\s+([A-Z0-9][\w '&.-]{1,60})/gi)) {
+      draft.requiredArtists?.push(match[1].trim());
+      matchedRules.add(`${scope}:requiredArtists`);
+    }
+
+    for (const match of clause.text.matchAll(/(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|some|few|couple)\s+(?:songs?|tracks?)\s+by\s+([A-Z0-9][\w '&.-]{1,60})/gi)) {
+      draft.requiredArtists?.push(match[1].trim());
+      matchedRules.add(`${scope}:requiredArtists`);
+    }
+
     if (containsAddIntent(clause.text) && parseExplicitRequestedTrackClause(clause.text).length === 0) {
       for (const match of clause.text.matchAll(/add\s+(?:a\s+)?(\d+|one|two|couple|three|four|five)?\s*(?:more\s+)?([\w -]{2,40})\s+(?:songs?|tracks?)\b/gi)) {
         const count = parseNumber(match[1] || "one") ?? 1;
@@ -598,6 +615,7 @@ function extractConstraintsForScope(
 
   draft.excludedArtists = unique(draft.excludedArtists);
   draft.noMoreFromArtists = unique(draft.noMoreFromArtists);
+  draft.requiredArtists = unique(draft.requiredArtists);
   draft.excludedGenres = unique(draft.excludedGenres);
   draft.noMoreFromGenres = unique(draft.noMoreFromGenres);
   draft.notes = unique(draft.notes);
@@ -668,6 +686,13 @@ export function parseDeterministicRequest(
 
   const persistentConstraints = scope === "persistent" ? scopedExtraction.constraints : {};
   const requestScopedConstraints = scope === "requestScoped" ? scopedExtraction.constraints : {};
+  const shouldDefaultRequiredArtistsToRequestScope = !scopeSignals.persistent && !scopeSignals.requestScoped;
+
+  if (shouldDefaultRequiredArtistsToRequestScope && scopedExtraction.constraints.requiredArtists?.length) {
+    const requestScopedRequiredArtists = [...scopedExtraction.constraints.requiredArtists];
+    delete persistentConstraints.requiredArtists;
+    requestScopedConstraints.requiredArtists = requestScopedRequiredArtists;
+  }
 
   return {
     constraintUpdates: pickConstraintUpdates(scopedExtraction.constraints),

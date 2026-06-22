@@ -6,5 +6,6 @@ export type { CuratorProgressEvent };
 export type CuratorRunOptions = {
   conversationContext?: ConversationContext;
   onProgress?: (event: CuratorProgressEvent) => void;
+  requestId?: string;
   signal?: AbortSignal;
 };

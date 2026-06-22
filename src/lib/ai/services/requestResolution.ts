@@ -16,6 +16,61 @@ import { explicitlyRequestedSuppressionFingerprints } from "@/lib/playlist/candi
 import type { PlaylistConstraints, PlaylistState, Track } from "@/types/playlist";
 import type { ConstraintExecutionState } from "@/lib/ai/services/workflowTypes";
 
+function parseExplicitRequestedArtists(userMessage: string): string[] {
+  const artists = new Set<string>();
+  for (const match of userMessage.matchAll(/(?:add|adding|find|give me|recommend|suggest|include|bring in)\s+(?:me\s+)?(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|a|an|some|few|couple)?\s*(?:more\s+)?(?:songs?|tracks?)?\s*(?:by|from)\s+([A-Z0-9][\w '&.-]{1,60})/gi)) {
+    artists.add(match[1].trim());
+  }
+  for (const match of userMessage.matchAll(/(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|some|few|couple)\s+(?:songs?|tracks?)\s+by\s+([A-Z0-9][\w '&.-]{1,60})/gi)) {
+    artists.add(match[1].trim());
+  }
+  return [...artists];
+}
+
+function sanitizeConflictingArtistQuotaIntent(
+  normalizedIntent: NormalizedInstructionIntent,
+  playlist: PlaylistState,
+  userMessage: string,
+  requestedAddCount: number | null,
+  matchedRules: string[]
+): NormalizedInstructionIntent {
+  const explicitRequestedArtists = parseExplicitRequestedArtists(userMessage);
+  if (explicitRequestedArtists.length === 0 || requestedAddCount == null || requestedAddCount < 2) {
+    return normalizedIntent;
+  }
+  if (playlist.constraints.maxTracksPerArtist != null) {
+    return normalizedIntent;
+  }
+  if (matchedRules.some((rule) => rule.endsWith(":maxTracksPerArtist") || rule.endsWith(":artistLimits"))) {
+    return normalizedIntent;
+  }
+
+  const normalizedArtists = new Set(explicitRequestedArtists.map((artist) => artist.trim().toLowerCase()));
+  const sanitizeArtistLimits = (artistLimits: PlaylistConstraints["artistLimits"] | undefined) => (
+    artistLimits?.filter((limit) => (
+      limit.maxTotalTracks >= requestedAddCount ||
+      !normalizedArtists.has(limit.artist.trim().toLowerCase()) ||
+      (playlist.constraints.artistLimits ?? []).some((existing) => (
+        existing.artist.trim().toLowerCase() === limit.artist.trim().toLowerCase()
+      ))
+    ))
+  );
+
+  return {
+    ...normalizedIntent,
+    persistentVerifiedRules: {
+      ...normalizedIntent.persistentVerifiedRules,
+      maxTracksPerArtist: normalizedIntent.persistentVerifiedRules.maxTracksPerArtist === 1 ? undefined : normalizedIntent.persistentVerifiedRules.maxTracksPerArtist,
+      artistLimits: sanitizeArtistLimits(normalizedIntent.persistentVerifiedRules.artistLimits)
+    },
+    requestScopedVerifiedRules: {
+      ...normalizedIntent.requestScopedVerifiedRules,
+      maxTracksPerArtist: normalizedIntent.requestScopedVerifiedRules.maxTracksPerArtist === 1 ? undefined : normalizedIntent.requestScopedVerifiedRules.maxTracksPerArtist,
+      artistLimits: sanitizeArtistLimits(normalizedIntent.requestScopedVerifiedRules.artistLimits)
+    }
+  };
+}
+
 function sanitizeNormalizedIntentWithDeterministicPlan(
   normalizedIntent: NormalizedInstructionIntent,
   userMessage: string,
@@ -244,13 +299,20 @@ export async function resolveCuratorRequestPlan(
     options
   );
   const instructionIntent = scopeAdditiveVocalProfileIntent(instructionIntentResult.intent, userMessage);
-  const normalizedIntent = sanitizeNormalizedIntentWithDeterministicPlan(
+  const baseNormalizedIntent = sanitizeNormalizedIntentWithDeterministicPlan(
     normalizeInstructionIntentLayers(instructionIntent),
     userMessage,
     reorderClauseTexts,
     deterministicParse.matchedRules
   );
-  const requestedAddCount = normalizedIntent.requestedAddCount ?? heuristics.counts.requestedAddCount;
+  const requestedAddCount = baseNormalizedIntent.requestedAddCount ?? heuristics.counts.requestedAddCount;
+  const normalizedIntent = sanitizeConflictingArtistQuotaIntent(
+    baseNormalizedIntent,
+    playlist,
+    userMessage,
+    requestedAddCount,
+    deterministicParse.matchedRules
+  );
   const targetTotalTrackCount = normalizedIntent.targetTotalTrackCount ?? heuristics.counts.targetTotalTrackCount;
   const preliminaryReplacementCount = normalizedIntent.replacementCount ?? heuristics.counts.replacementCount;
   const constraintState = sanitizeConstraintStateWithDeterministicPlan(buildConstraintExecutionState({

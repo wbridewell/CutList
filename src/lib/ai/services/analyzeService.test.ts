@@ -93,6 +93,51 @@ describe("analyze service compression routing", () => {
     expect(result.reviewSuggestions).toEqual([]);
   });
 
+  it("downgrades overbroad compression suggestions to informational review notes", async () => {
+    vi.mocked(getJsonFromLLM).mockResolvedValue({
+      curatorTake: "The room is overbuilt, but this cut is too brutal to apply blindly.",
+      message: "There is excess here, but not enough to justify gutting the playlist.",
+      strengths: [],
+      weakLinks: [],
+      sequencingNotes: [],
+      suggestedEdits: [],
+      intentSummary: {
+        playlistIdentity: "Dream-pop drift.",
+        preservedQualities: [],
+        likelyUserIntent: "Keep the soft landing.",
+        riskNotes: [],
+        confidence: "medium"
+      },
+      trackRoles: [],
+      transitionReview: [],
+      reviewSuggestions: [{
+        id: "compress-1",
+        type: "compress_section",
+        applicationMode: "remove_existing",
+        affectedTrackIds: ["open", "middle"],
+        rationale: "Trim the drag.",
+        intentPreservation: "Keeps anchors.",
+        risk: null,
+        confidence: "medium",
+        suggestedPrompt: null,
+        compressionPlan: {
+          removeTrackIds: ["open", "middle"],
+          keepTrackIds: ["close"],
+          targetTrackCount: 1,
+          targetTotalDurationMs: null
+        }
+      }]
+    });
+
+    const result = await handleAnalyzePlaylist(playlist, "compress this a little");
+
+    expect(result.reviewSuggestions[0]).toMatchObject({
+      id: "compress-1",
+      type: "compress_section",
+      applicationMode: "informational"
+    });
+  });
+
   it("downgrades incomplete reorder suggestions to informational review notes", async () => {
     vi.mocked(getJsonFromLLM).mockResolvedValue({
       curatorTake: "The tracks work, but the clusters need air between them.",
@@ -130,6 +175,12 @@ describe("analyze service compression routing", () => {
       type: "reorder",
       applicationMode: "informational"
     });
+  });
+
+  it("filters non-removal suggestions from weak-link identification reviews", async () => {
+    const result = await handleAnalyzePlaylist(playlist, "Review this playlist and name the two tracks that weaken its identity.");
+
+    expect(result.reviewSuggestions.every((suggestion) => suggestion.type === "remove")).toBe(true);
   });
 
   it("recovers critique output after one repair pass instead of falling back immediately", async () => {

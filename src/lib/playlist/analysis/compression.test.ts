@@ -8,6 +8,9 @@ describe("compression analysis helpers", () => {
       targetTrackCount: 12,
       compressionStrength: "moderate"
     });
+    expect(parseCompressionRequest("make this a 12 track playlist")).toMatchObject({
+      targetTrackCount: 12
+    });
     expect(parseCompressionRequest("make this a 45 minute playlist")).toMatchObject({
       targetTotalDurationMs: 2_700_000
     });
@@ -17,6 +20,10 @@ describe("compression analysis helpers", () => {
     expect(parseCompressionRequest("aggressively cut this down")).toMatchObject({
       compressionStrength: "aggressive"
     });
+  });
+
+  it("does not mistake review prompts about naming weak tracks for compression", () => {
+    expect(parseCompressionRequest("Review this playlist and name the two tracks that weaken its identity.")).toBeNull();
   });
 
   it("filters compression suggestions when the review was not explicitly about compression", () => {

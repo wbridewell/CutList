@@ -597,6 +597,59 @@ describe("curator LLM boundaries", () => {
     expect(result.playlistUpdate?.tracks.map((track) => track.id)).toEqual(["track-2", "track-1"]);
   });
 
+  it("keeps same-order resequencing requests in reorder mode instead of duplicate-candidate generation", async () => {
+    vi.mocked(getLLMProvider).mockReturnValue("ollama");
+    const first = acceptedTrack("track-1", "First", "A");
+    const second = acceptedTrack("track-2", "Second", "B");
+    vi.mocked(getJsonFromLLM).mockResolvedValueOnce({
+      message: "The existing order already carries the best flow, so I kept the sequence and tightened the framing.",
+      playlistMeta: { title: "Held Line", mood: "Steady pressure.", arc: "A straight, deliberate climb." },
+      orderedTrackIds: ["track-1", "track-2"],
+      orderRationale: "The current order already does the work."
+    });
+
+    const result = await handlePlaylistMessage(
+      { ...playlist, tracks: [first, second] },
+      "Reorder the playlist to improve flow without adding or removing songs."
+    );
+
+    expect(getJsonFromLLM).toHaveBeenCalledTimes(1);
+    expect(verifyTrack).not.toHaveBeenCalled();
+    expect(verifyTracks).not.toHaveBeenCalled();
+    expect(result.rejectedCandidates).toEqual([]);
+    expect(result.playlistUpdate?.action).toBe("reorder");
+    expect(result.playlistUpdate?.tracks.map((track) => track.id)).toEqual(["track-1", "track-2"]);
+  });
+
+  it("bypasses the generation-removal workflow entirely for strict reorder-only requests", async () => {
+    vi.mocked(getLLMProvider).mockReturnValue("ollama");
+    const first = acceptedTrack("track-1", "First", "A");
+    const second = acceptedTrack("track-2", "Second", "B");
+    const progressMessages: string[] = [];
+    vi.mocked(getJsonFromLLM).mockResolvedValueOnce({
+      message: "The sequence is cleaner now.",
+      playlistMeta: { title: "Held Line", mood: "Steady pressure.", arc: "A straight, deliberate climb." },
+      orderedTrackIds: ["track-2", "track-1"],
+      orderRationale: "The second track opens the door more cleanly."
+    });
+
+    await handlePlaylistMessage(
+      { ...playlist, tracks: [first, second] },
+      "Reorder the playlist to improve flow without adding or removing songs.",
+      {
+        onProgress(event) {
+          progressMessages.push(event.message);
+        }
+      }
+    );
+
+    expect(progressMessages).toEqual([
+      "Understanding your request and active rules.",
+      "Asking the curator for playlist sequencing and shape.",
+      "Finished playlist sequencing and description."
+    ]);
+  });
+
   it("preserves deterministically extracted constraints on early playlist shaping requests", async () => {
     vi.mocked(getLLMProvider).mockReturnValue("ollama");
     const first = acceptedTrack("track-1", "First", "A");

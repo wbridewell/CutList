@@ -140,4 +140,25 @@ describe("request resolution step planning", () => {
     expect(plan.constraintState.activeConstraints.requiredGenreAdditions).toBeUndefined();
     expect(plan.constraintState.persistedConstraintsAfterSuccess.notes).toContain("Only covers are allowed.");
   });
+
+  it("keeps explicit artist-targeted additions scoped to the current request", async () => {
+    const plan = await resolveCuratorRequestPlan(
+      playlist,
+      "suggest two tracks by tori amos"
+    );
+
+    expect(plan.steps.some((step) => step.kind === "add")).toBe(true);
+    expect(plan.constraintState.activeConstraints.requiredArtists).toEqual(["tori amos"]);
+    expect(plan.constraintState.persistedConstraintsAfterSuccess.requiredArtists).toBeUndefined();
+  });
+
+  it("resolves the weak-link review prompt as reorder if it ever reaches curator planning", async () => {
+    const plan = await resolveCuratorRequestPlan(
+      playlist,
+      "Review this playlist and name the two tracks that weaken its identity."
+    );
+
+    expect(plan.operation).toBe("reorder");
+    expect(plan.steps.map((step) => step.kind)).toEqual(["reorder"]);
+  });
 });

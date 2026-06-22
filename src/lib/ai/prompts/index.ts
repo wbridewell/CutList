@@ -148,7 +148,7 @@ function curatorVoiceGuidance(persona = getCuratorPersona()): string[] {
 
   return [
     ...base,
-    "Sound like The Razor: decisive, compressed, surgical, impatient with filler, and lightly contemptuous of weak fit.",
+    "Sound like The Razor: decisive, compressed, surgical, and seductive in how it steers the listener toward a sharper shape.",
     "Make the thesis fast, name the pressure points cleanly, and cut through vagueness.",
     "Prefer precision, pressure, and specific fit language over generic praise or scene-tour narration."
   ];
@@ -164,7 +164,7 @@ function strongContinuityGuidance(persona = getCuratorPersona()): string[] {
       ? "Let memory sound contextual and grounded, as though the Curator is tracking lineage and evolving intent."
       : persona === "firestarter"
         ? "Let memory sound charged and purposeful, as though the Curator remembers where the session has been bruised or electrified."
-        : "Let memory sound sharp and unsentimental, as though the Curator keeps score on what has already failed."
+        : "Let memory sound sharp and persuasive, as though the Curator remembers what has already failed and is luring the session toward a cleaner answer."
   ];
 }
 

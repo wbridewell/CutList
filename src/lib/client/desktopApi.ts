@@ -9,6 +9,7 @@ import {
   type DesktopPlaylistMessagePayload,
   type DesktopRevealPathPayload
 } from "@/lib/desktop/contracts";
+import { emitReviewRoutingTrace } from "@/lib/debug/reviewRouting";
 import { getTauriCore, getTauriEvent } from "@/lib/client/tauriRuntime";
 import type {
   AnalyzePlaylistRequest,
@@ -30,10 +31,14 @@ async function invokeDesktop<T>(command: string, payload?: unknown): Promise<T> 
 }
 
 export async function invokeDesktopMessage(
-  payload: Omit<DesktopPlaylistMessagePayload, "requestId">,
+  payload: Omit<DesktopPlaylistMessagePayload, "requestId"> & { requestId?: string },
   options: { onProgress: (message: string) => void; signal?: AbortSignal }
 ): Promise<CuratorResponse> {
-  const id = requestId();
+  const id = payload.requestId ?? requestId();
+  emitReviewRoutingTrace("desktop.invoke.playlistMessage", {
+    requestId: id,
+    userMessage: payload.userMessage
+  });
   const { listen } = await getTauriEvent();
   const { invoke } = await getTauriCore();
   const unlisten = await listen<DesktopProgressPayload>(desktopProgressEventName, (event) => {
@@ -67,6 +72,10 @@ export async function invokeDesktopMessage(
 }
 
 export function invokeDesktopAnalyze(payload: AnalyzePlaylistRequest) {
+  emitReviewRoutingTrace("desktop.invoke.analyzePlaylist", {
+    requestId: payload.requestId ?? null,
+    userQuestion: payload.userQuestion ?? null
+  });
   return invokeDesktop<DesktopBackendResultMap["analyzePlaylist"]>(desktopCommandNames.analyzePlaylist, payload);
 }
 

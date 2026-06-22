@@ -5,12 +5,22 @@ import {
   shouldExposeModelDebug,
   summarizeModelError
 } from "@/lib/ai/modelErrors";
+import { emitReviewRoutingTrace, summarizeReviewSuggestions } from "@/lib/debug/reviewRouting";
 import { critiquePrompt } from "@/lib/ai/prompts";
 import { attemptLlmContract } from "@/lib/ai/services/llmService";
+import type { CompressionRequest } from "@/lib/playlist/analysis/compression";
 import { filterCompressionSuggestions, parseCompressionRequest } from "@/lib/playlist/analysis/compression";
 import { evaluatePlaylistConstraints } from "@/lib/playlist/constraints";
 import { deterministicAnalyzePlaylist } from "@/lib/playlist/analysis/deterministicAnalyze";
 import type { AnalyzePlaylistResponse, ConversationContext, PlaylistState, ReviewSuggestion } from "@/types/playlist";
+
+function isWeakLinkIdentificationRequest(userQuestion?: string | null): boolean {
+  if (!userQuestion?.trim()) {
+    return false;
+  }
+  return /\b(?:name|identify|list|tell me)\b.{0,30}\b(?:one|two|three|\d+)\b.{0,20}\btracks?\b.{0,40}\b(?:weaken|hurt|dilute|break|fracture|undermine|don't fit|doesn't fit|soften)\b/i.test(userQuestion) ||
+    /\bwhich\s+tracks?\b.{0,40}\b(?:weaken|hurt|dilute|break|fracture|undermine|don't fit|doesn't fit|soften)\b/i.test(userQuestion);
+}
 
 function hasValidCompleteOrder(playlist: PlaylistState, suggestion: ReviewSuggestion): boolean {
   if (suggestion.applicationMode !== "reorder_existing") {
@@ -26,18 +36,41 @@ function hasValidCompleteOrder(playlist: PlaylistState, suggestion: ReviewSugges
 
 function normalizeReviewSuggestions(
   playlist: PlaylistState,
-  suggestions: ReviewSuggestion[]
+  suggestions: ReviewSuggestion[],
+  compressionRequest: CompressionRequest | null,
+  userQuestion?: string
 ): ReviewSuggestion[] {
-  return suggestions.map((suggestion) => {
-    if (suggestion.applicationMode !== "reorder_existing" || hasValidCompleteOrder(playlist, suggestion)) {
-      return suggestion;
+  const weakLinkOnly = isWeakLinkIdentificationRequest(userQuestion);
+  return suggestions.flatMap((suggestion) => {
+    if (weakLinkOnly && suggestion.type !== "remove") {
+      return [];
     }
 
-    return {
+    if (suggestion.type === "compress_section") {
+      const removeCount = suggestion.compressionPlan?.removeTrackIds.length ?? suggestion.affectedTrackIds.length;
+      const keptCount = suggestion.compressionPlan?.keepTrackIds?.length ?? Math.max(0, playlist.tracks.length - removeCount);
+      const explicitTargetCount = compressionRequest?.targetTrackCount;
+      const isOverbroad = removeCount >= Math.ceil(playlist.tracks.length * 0.5) || keptCount < Math.max(4, Math.ceil(playlist.tracks.length * 0.4));
+      const matchesExplicitTarget = explicitTargetCount != null && keptCount <= explicitTargetCount;
+
+      if (isOverbroad && !matchesExplicitTarget) {
+        return [{
+          ...suggestion,
+          applicationMode: "informational",
+          risk: suggestion.risk ?? "This compression pass is too destructive to apply directly from review; treat it as a note, not an issue action."
+        }];
+      }
+    }
+
+    if (suggestion.applicationMode !== "reorder_existing" || hasValidCompleteOrder(playlist, suggestion)) {
+      return [suggestion];
+    }
+
+    return [{
       ...suggestion,
       applicationMode: "informational",
       risk: suggestion.risk ?? "This is a curator note only because the review did not provide a complete safe reorder."
-    };
+    }];
   });
 }
 
@@ -67,10 +100,15 @@ function mergeDeterministicBridgeSuggestions(
 export async function handleAnalyzePlaylist(
   playlist: PlaylistState,
   userQuestion?: string,
-  options: { conversationContext?: ConversationContext } = {}
+  options: { conversationContext?: ConversationContext; requestId?: string } = {}
 ): Promise<AnalyzePlaylistResponse> {
   const constraintReport = evaluatePlaylistConstraints(playlist.tracks, playlist.constraints);
   const compressionRequest = parseCompressionRequest(userQuestion);
+  emitReviewRoutingTrace("backend.handleAnalyzePlaylist.start", {
+    compressionRequestMatched: Boolean(compressionRequest),
+    requestId: options.requestId ?? null,
+    userQuestion: userQuestion ?? null
+  });
   const attempt = await attemptLlmContract<Omit<AnalyzePlaylistResponse, "constraintReport">>(
     "playlistCritique",
     critiquePrompt(playlist, userQuestion, {
@@ -78,15 +116,30 @@ export async function handleAnalyzePlaylist(
       conversationContext: options.conversationContext
     })
   );
+  emitReviewRoutingTrace("backend.handleAnalyzePlaylist.attempt", {
+    requestId: options.requestId ?? null,
+    status: attempt.status,
+    reason: attempt.status === "fallback" ? attempt.reason : null
+  });
   if (attempt.status !== "fallback") {
     const reviewSuggestions = normalizeReviewSuggestions(
       playlist,
-      filterCompressionSuggestions(attempt.parsed.reviewSuggestions, compressionRequest)
+      filterCompressionSuggestions(attempt.parsed.reviewSuggestions, compressionRequest),
+      compressionRequest,
+      userQuestion
     );
     const bridgeAwareSuggestions = mergeDeterministicBridgeSuggestions(playlist, attempt.parsed, reviewSuggestions);
     const fallbackCompression = compressionRequest
       ? deterministicAnalyzePlaylist(playlist, undefined, { compressionRequest }).reviewSuggestions.filter((suggestion) => suggestion.type === "compress_section")
       : [];
+    emitReviewRoutingTrace("backend.handleAnalyzePlaylist.success", {
+      requestId: options.requestId ?? null,
+      finalSuggestions: summarizeReviewSuggestions(
+        bridgeAwareSuggestions.some((suggestion) => suggestion.type === "compress_section")
+          ? bridgeAwareSuggestions
+          : [...bridgeAwareSuggestions, ...fallbackCompression]
+      )
+    });
     return {
       ...attempt.parsed,
       reviewSuggestions: bridgeAwareSuggestions.some((suggestion) => suggestion.type === "compress_section")
@@ -108,6 +161,11 @@ export async function handleAnalyzePlaylist(
       ? "LLM provider is disabled, so I ran a deterministic playlist check instead."
       : "The local model did not return the expected critique JSON, so I ran a deterministic playlist check instead.";
   const fallback = deterministicAnalyzePlaylist(playlist, message, { compressionRequest });
+  emitReviewRoutingTrace("backend.handleAnalyzePlaylist.fallback", {
+    requestId: options.requestId ?? null,
+    fallbackSuggestions: summarizeReviewSuggestions(fallback.reviewSuggestions),
+    hasReorderSuggestion: fallback.reviewSuggestions.some((suggestion) => suggestion.type === "reorder" || suggestion.applicationMode === "reorder_existing")
+  });
   if ((attempt.reason === "shape_error" || attempt.reason === "json_extraction_error") && shouldExposeModelDebug()) {
     return {
       ...fallback,

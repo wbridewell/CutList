@@ -59,7 +59,7 @@ function hasCompressionLanguage(userQuestion: string): boolean {
 
 function parseTargetTrackCount(userQuestion: string): number | null {
   const match = userQuestion.match(/\b(?:cut|trim|compress|tighten|reduce|bring)\b.{0,40}?\bto\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)\s+(?:total\s*)?(?:tracks?|songs?)\b/i)
-    ?? userQuestion.match(/\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)\s+(?:total\s*)?(?:tracks?|songs?)\b/i);
+    ?? userQuestion.match(/\b(?:make|turn)\b.{0,20}?\b(?:this|it|the playlist|the set)\b.{0,20}?\b(?:a|an)?\s*(\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)(?:-|\s)+(?:track|song)\s+playlist\b/i);
   return match ? parseCountToken(match[1]) : null;
 }
 

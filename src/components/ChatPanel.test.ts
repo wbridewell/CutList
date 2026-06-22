@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { restoreCuratorTurnUndoState, shouldClearStaleReviewState } from "@/components/ChatPanel";
+import { classifyComposerRequest } from "@/lib/client/workflows";
 import type { RequestHistoryEntry } from "@/lib/playlist/collaboration";
 import type { AnalyzePlaylistResponse, PlaylistState } from "@/types/playlist";
 
@@ -75,5 +76,34 @@ describe("ChatPanel stale review cleanup", () => {
       sourceEntryId: "request-1"
     });
     expect(restoreCuratorTurnUndoState([undoableHistory], { ...playlist, updatedAt: "2026-06-20T00:03:00.000Z" })).toBeNull();
+  });
+
+  it("routes explicit composer review prompts to playlist review instead of curator edit requests", () => {
+    const populatedPlaylist = {
+      ...playlist,
+      tracks: [{
+        id: "track-1",
+        title: "Song",
+        artist: "Artist",
+        album: null,
+        durationMs: 180000,
+        runtime: "3:00",
+        verified: true,
+        source: "manual" as const,
+        sourceId: "track-1",
+        sourceUrl: null,
+        artworkUrl: null,
+        vibeTags: [],
+        genreTags: [],
+        rationale: null,
+        energy: null,
+        verificationNote: "Manual."
+      }]
+    };
+    expect(classifyComposerRequest("Review this playlist and name the two tracks that weaken its identity.", populatedPlaylist)).toBe("review_only");
+    expect(classifyComposerRequest("Analyze what is working here.", populatedPlaylist)).toBe("review_only");
+    expect(classifyComposerRequest("Review this playlist. Suggest two tracks by Tori Amos.", populatedPlaylist)).toBe("mixed_review_and_curator");
+    expect(classifyComposerRequest("Reorder the playlist to improve flow without adding or removing songs.", populatedPlaylist)).toBe("curator_only");
+    expect(classifyComposerRequest("Review this playlist.", { ...playlist, tracks: [] })).toBe("curator_only");
   });
 });

@@ -15,15 +15,19 @@ import {
   acceptManualMatchWorkflow,
   applyVerifiedReviewSuggestionResponse,
   applyReviewSuggestionWorkflow,
+  classifyComposerRequest,
   createRequestMessageList,
   playlistChangedMeaningfully,
   promptForReviewSuggestion,
+  reviewPromptForComposerRequest,
   runAnalyzeWorkflow,
   runCuratorRequestWorkflow,
+  runMixedReviewAndCuratorWorkflow,
   runImportWorkflow,
   runSeedVerificationWorkflow,
   type ClientWorkflowResult
 } from "@/lib/client/workflows";
+import { emitReviewRoutingTrace } from "@/lib/debug/reviewRouting";
 import {
   createCuratorUndoHistoryEntry,
   rejectedCandidateSiblingIssueIds,
@@ -62,6 +66,15 @@ type CuratorTurnUndoState = {
   expectedUpdatedAt: string;
   previousPlaylist: PlaylistState;
   sourceEntryId: string;
+};
+
+type ComposerRequestApplyResult = {
+  messages: ChatMessage[];
+  nextPlaylist?: PlaylistState;
+  historyEntries?: Array<RequestHistoryEntry | undefined>;
+  review?: AnalyzePlaylistResponse | null;
+  reviewEntryId?: string | null;
+  curatorUndoEntry?: RequestHistoryEntry | null;
 };
 
 export function restoreCuratorTurnUndoState(
@@ -125,6 +138,12 @@ export function ChatPanel({
   requestedUtilitySectionToken = 0,
   showWelcomeGuide = false
 }: Props) {
+  function reviewRoutingRequestId(): string {
+    return typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `cutlist-review-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  }
+
   const [userMessage, setUserMessage] = useState("");
   const [seedText, setSeedText] = useState("");
   const [importText, setImportText] = useState("");
@@ -199,6 +218,61 @@ export function ChatPanel({
     }
   }
 
+  function resetReviewState() {
+    setAppliedSuggestionIds(new Set());
+    setDismissedSuggestionIds(new Set());
+    setIgnoredSuggestionIds(new Set());
+    setSentSuggestionIds(new Set());
+    setReviewUndoPayload(null);
+  }
+
+  function applyReviewState(review: AnalyzePlaylistResponse, reviewEntryId: string | null = null) {
+    setActiveReview(review);
+    setActiveReviewEntryId(reviewEntryId);
+    resetReviewState();
+    if (autoOpenIssuesRef.current) {
+      setActiveDrawerMode("issues");
+    }
+  }
+
+  function applyComposerRequestResult(result: ComposerRequestApplyResult) {
+    if (result.nextPlaylist) {
+      onPlaylistChange(result.nextPlaylist);
+    }
+    onMessagesChange(result.messages);
+
+    for (const entry of result.historyEntries ?? []) {
+      if (!entry) {
+        continue;
+      }
+      appendHistory(entry);
+      maybeAutoOpenIssues(entry);
+    }
+
+    if (
+      result.curatorUndoEntry?.kind === "request" &&
+      result.curatorUndoEntry.playlistBefore &&
+      result.nextPlaylist &&
+      playlistChangedMeaningfully(playlistForComposer, result.nextPlaylist)
+    ) {
+      setCuratorTurnUndoState({
+        expectedUpdatedAt: result.nextPlaylist.updatedAt,
+        previousPlaylist: result.curatorUndoEntry.playlistBefore,
+        sourceEntryId: result.curatorUndoEntry.id
+      });
+    }
+
+    if (result.review) {
+      applyReviewState(result.review, result.reviewEntryId ?? null);
+    }
+    emitReviewRoutingTrace("chat.applyComposerRequestResult", {
+      assistantContainsReordered: result.messages[result.messages.length - 1]?.content.includes("Reordered ") ?? false,
+      hasNextPlaylist: Boolean(result.nextPlaylist),
+      historyKinds: (result.historyEntries ?? []).filter(Boolean).map((entry) => entry?.kind ?? null),
+      reviewApplied: Boolean(result.review)
+    });
+  }
+
   function applyWorkflowResult(result: ClientWorkflowResult | null) {
     if (!result) {
       return;
@@ -214,17 +288,14 @@ export function ChatPanel({
       maybeAutoOpenIssues(result.historyEntry);
     }
     if (result.review) {
-      setActiveReview(result.review);
-      setActiveReviewEntryId(result.historyEntry?.id ?? null);
-      setAppliedSuggestionIds(new Set());
-      setDismissedSuggestionIds(new Set());
-      setIgnoredSuggestionIds(new Set());
-      setSentSuggestionIds(new Set());
-      setReviewUndoPayload(null);
-      if (autoOpenIssuesRef.current) {
-        setActiveDrawerMode("issues");
-      }
+      applyReviewState(result.review, result.historyEntry?.id ?? null);
     }
+    emitReviewRoutingTrace("chat.applyWorkflowResult", {
+      assistantContainsReordered: result.assistantMessage.content.includes("Reordered "),
+      hasNextPlaylist: Boolean(result.nextPlaylist),
+      historyKind: result.historyEntry?.kind ?? null,
+      reviewApplied: Boolean(result.review)
+    });
   }
 
   useEffect(() => {
@@ -252,11 +323,7 @@ export function ChatPanel({
 
     setActiveReview(null);
     setActiveReviewEntryId(null);
-    setAppliedSuggestionIds(new Set());
-    setDismissedSuggestionIds(new Set());
-    setIgnoredSuggestionIds(new Set());
-    setSentSuggestionIds(new Set());
-    setReviewUndoPayload(null);
+    resetReviewState();
   }, [activeReview, activeReviewEntryId, history]);
 
   useEffect(() => {
@@ -384,10 +451,15 @@ export function ChatPanel({
   async function submitCuratorRequest(
     outgoing: string,
     startingStatus: string,
-    options: { reviewSuggestion?: ReviewSuggestion } = {}
+    options: { requestId?: string; reviewSuggestion?: ReviewSuggestion } = {}
   ) {
+    const requestId = options.requestId ?? reviewRoutingRequestId();
     const requestMessages = createRequestMessageList(messages, outgoing);
     onMessagesChange(requestMessages);
+    emitReviewRoutingTrace("chat.submitCuratorRequest", {
+      requestId,
+      outgoing
+    });
     autoOpenIssuesRef.current = true;
     setBusy(true);
     setProgressStatus(startingStatus);
@@ -395,7 +467,7 @@ export function ChatPanel({
     setActiveController(controller);
     try {
       const result = await runCuratorRequestWorkflow(
-        { messages, outgoing, playlist: playlistForComposer },
+        { messages, outgoing, playlist: playlistForComposer, requestId },
         { onProgress: setProgressStatus, signal: controller.signal }
       );
       const nextPlaylist = result.data && options.reviewSuggestion
@@ -409,21 +481,12 @@ export function ChatPanel({
           resultingPlaylistUpdatedAt: nextPlaylist.updatedAt
         }
         : result.historyEntry;
-      if (nextPlaylist) {
-        onPlaylistChange(nextPlaylist);
-      }
-      onMessagesChange(result.messages);
-      if (historyEntry) {
-        appendHistory(historyEntry);
-        maybeAutoOpenIssues(historyEntry);
-      }
-      if (historyEntry?.kind === "request" && historyEntry.playlistBefore && nextPlaylist && changed) {
-        setCuratorTurnUndoState({
-          expectedUpdatedAt: nextPlaylist.updatedAt,
-          previousPlaylist: historyEntry.playlistBefore,
-          sourceEntryId: historyEntry.id
-        });
-      }
+      applyComposerRequestResult({
+        messages: result.messages,
+        nextPlaylist,
+        historyEntries: [historyEntry],
+        curatorUndoEntry: historyEntry
+      });
     } finally {
       setBusy(false);
       setProgressStatus(null);
@@ -451,12 +514,18 @@ export function ChatPanel({
   async function reviewCompressedPlaylist(suggestion: ReviewSuggestion) {
     autoOpenIssuesRef.current = true;
     const outgoing = promptForReviewSuggestion(suggestion, playlistForComposer);
+    const requestId = reviewRoutingRequestId();
     const requestMessages = createRequestMessageList(messages, reviewRequestLabel(outgoing));
     onMessagesChange(requestMessages);
+    emitReviewRoutingTrace("chat.reviewCompressedPlaylist", {
+      requestId,
+      outgoing
+    });
     setBusy(true);
     try {
       const result = await runAnalyzeWorkflow({
         playlist: playlistForComposer,
+        requestId,
         userMessage: outgoing,
         messages
       });
@@ -490,8 +559,61 @@ export function ChatPanel({
       return;
     }
     const outgoing = userMessage;
+    const requestKind = classifyComposerRequest(outgoing, playlistForComposer);
+    const requestId = reviewRoutingRequestId();
+    emitReviewRoutingTrace("chat.sendMessage.route", {
+      requestId,
+      outgoing,
+      requestKind
+    });
     setUserMessage("");
-    await submitCuratorRequest(outgoing, "Starting request.");
+    if (requestKind === "review_only") {
+      autoOpenIssuesRef.current = true;
+      const requestMessages = createRequestMessageList(messages, reviewRequestLabel(outgoing));
+      onMessagesChange(requestMessages);
+      setBusy(true);
+      try {
+        const result = await runAnalyzeWorkflow({
+          playlist: playlistForComposer,
+          requestId,
+          userMessage: reviewPromptForComposerRequest(outgoing),
+          messages
+        });
+        applyWorkflowResult(result);
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+    if (requestKind === "mixed_review_and_curator") {
+      autoOpenIssuesRef.current = true;
+      const requestMessages = createRequestMessageList(messages, outgoing);
+      onMessagesChange(requestMessages);
+      setBusy(true);
+      setProgressStatus("Starting mixed review and curator request.");
+      const controller = new AbortController();
+      setActiveController(controller);
+      try {
+        const result = await runMixedReviewAndCuratorWorkflow(
+          { messages, outgoing, playlist: playlistForComposer, requestId },
+          { analyze: undefined, onProgress: setProgressStatus, signal: controller.signal, sendMessage: undefined }
+        );
+        applyComposerRequestResult({
+          messages: result.messages,
+          nextPlaylist: result.nextPlaylist,
+          historyEntries: [result.reviewHistoryEntry, result.curatorHistoryEntry],
+          review: result.review,
+          reviewEntryId: result.reviewHistoryEntry?.id ?? null,
+          curatorUndoEntry: result.curatorHistoryEntry
+        });
+      } finally {
+        setBusy(false);
+        setProgressStatus(null);
+        setActiveController(null);
+      }
+      return;
+    }
+    await submitCuratorRequest(outgoing, "Starting request.", { requestId });
   }
 
   function interruptRequest() {
@@ -532,12 +654,17 @@ export function ChatPanel({
 
   async function analyze() {
     autoOpenIssuesRef.current = true;
-    const outgoing = reviewRequestLabel(userMessage);
+    const outgoing = reviewPromptForComposerRequest(userMessage);
+    const requestId = reviewRoutingRequestId();
     const requestMessages = createRequestMessageList(messages, outgoing);
     onMessagesChange(requestMessages);
+    emitReviewRoutingTrace("chat.analyzeButton", {
+      requestId,
+      outgoing
+    });
     setBusy(true);
     try {
-      const result = await runAnalyzeWorkflow({ playlist: playlistForComposer, userMessage, messages });
+      const result = await runAnalyzeWorkflow({ playlist: playlistForComposer, requestId, userMessage: outgoing, messages });
       applyWorkflowResult(result);
       if (result.clearInput) {
         setUserMessage("");

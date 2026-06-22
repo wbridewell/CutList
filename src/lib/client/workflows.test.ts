@@ -5,14 +5,19 @@ import {
   applyReviewSuggestionWorkflow,
   applyVerifiedReviewSuggestionResponse,
   buildConversationContext,
+  classifyComposerRequest,
   composeAnalyzeAssistantMessage,
+  composeMixedReviewAndCuratorAssistantMessage,
   createCompletedRequestMessages,
   createRequestMessageList,
   promptForReviewSuggestion,
+  reviewPromptForComposerRequest,
   runAnalyzeWorkflow,
   runCuratorRequestWorkflow,
+  runMixedReviewAndCuratorWorkflow,
   runImportWorkflow,
-  runSeedVerificationWorkflow
+  runSeedVerificationWorkflow,
+  splitMixedComposerRequest
 } from "@/lib/client/workflows";
 import type {
   AnalyzePlaylistResponse,
@@ -132,6 +137,46 @@ describe("client workflows", () => {
     ]);
   });
 
+  it("classifies composer requests into review, curator, and mixed paths", () => {
+    const base = playlist([track()]);
+
+    expect(classifyComposerRequest("review the playlist", base)).toBe("review_only");
+    expect(classifyComposerRequest("suggest two tracks by tori amos", base)).toBe("curator_only");
+    expect(classifyComposerRequest("review the playlist. suggest two tracks by tori amos.", base)).toBe("mixed_review_and_curator");
+    expect(classifyComposerRequest("review this, then reorder it", base)).toBe("mixed_review_and_curator");
+    expect(classifyComposerRequest("reorder the playlist to improve flow", base)).toBe("curator_only");
+    expect(classifyComposerRequest("review the playlist", playlist())).toBe("curator_only");
+  });
+
+  it("splits mixed composer prompts into review-only and curator-only clauses", () => {
+    expect(splitMixedComposerRequest("review the playlist. suggest two tracks by tori amos.")).toEqual({
+      reviewPrompt: "review the playlist.",
+      curatorPrompt: "suggest two tracks by tori amos."
+    });
+    expect(splitMixedComposerRequest("review this, then reorder it")).toEqual({
+      reviewPrompt: "review this",
+      curatorPrompt: "reorder it"
+    });
+    expect(splitMixedComposerRequest("review the playlist and suggest two tracks by tori amos")).toEqual({
+      reviewPrompt: "review the playlist",
+      curatorPrompt: "suggest two tracks by tori amos"
+    });
+  });
+
+  it("derives a critique-only prompt for review button flows", () => {
+    expect(reviewPromptForComposerRequest("")).toBe("Review this playlist.");
+    expect(reviewPromptForComposerRequest("review the playlist and add two tori amos tracks")).toBe("review the playlist");
+    expect(reviewPromptForComposerRequest("Review this playlist and name the two tracks that weaken its identity.")).toBe(
+      "Review this playlist and name the two tracks that weaken its identity."
+    );
+  });
+
+  it("composes deterministic mixed review and curator assistant messages", () => {
+    expect(composeMixedReviewAndCuratorAssistantMessage("Review side.", "Curator side.")).toBe(
+      "Review:\nReview side.\n\nCurator action:\nCurator side."
+    );
+  });
+
   it("runs a curator request and returns playlist, messages, and history updates", async () => {
     const base = playlist([track({ id: "itunes:1", sourceId: "1", title: "First" })]);
     const second = track({ id: "itunes:2", sourceId: "2", title: "Second" });
@@ -175,6 +220,90 @@ describe("client workflows", () => {
       playlistBefore: base
     });
     expect(result.historyEntry?.resultingPlaylistUpdatedAt).toBe(result.nextPlaylist?.updatedAt);
+  });
+
+  it("runs mixed review and curator requests as one combined visible turn", async () => {
+    const base = playlist([track({ id: "itunes:1", sourceId: "1", title: "First" })]);
+    const second = track({ id: "itunes:2", sourceId: "2", title: "Second" });
+    const priorMessages = [{ role: "assistant" as const, content: "Ready." }];
+    const analyzeCalls: string[] = [];
+    const curatorCalls: PlaylistMessageRequest[] = [];
+
+    const result = await runMixedReviewAndCuratorWorkflow(
+      { messages: priorMessages, outgoing: "review the playlist. suggest two tracks by tori amos.", playlist: base },
+      {
+        onProgress: () => undefined,
+        analyze: async (_playlist, userMessage) => {
+          analyzeCalls.push(userMessage ?? "");
+          return analysisResponse({
+            curatorTake: "The center holds, but the room wants another voice.",
+            reviewSuggestions: [{
+              id: "review-suggestion-1",
+              type: "add_bridge",
+              applicationMode: "verify_candidate",
+              affectedTrackIds: ["itunes:1", "itunes:2"],
+              rationale: "Smooth the handoff.",
+              intentPreservation: "Keeps the arc intact.",
+              risk: null,
+              confidence: "medium",
+              suggestedPrompt: "Find a bridge track."
+            }]
+          });
+        },
+        sendMessage: async (request) => {
+          curatorCalls.push(request);
+          return {
+            message: "Added one.",
+            playlistUpdate: { action: "add", tracks: [second], orderRationale: null },
+            playlistMeta: null,
+            updatedConstraints: {},
+            constraintReport: { passed: true, totalDurationMs: 360000, violations: [] },
+            rejectedCandidates: []
+          };
+        }
+      }
+    );
+
+    expect(analyzeCalls).toEqual(["review the playlist."]);
+    expect(curatorCalls[0]?.userMessage).toBe("suggest two tracks by tori amos.");
+    expect(result.assistantMessage.content).toContain("Review:\nThe center holds, but the room wants another voice.");
+    expect(result.assistantMessage.content).toContain("Curator action:\nAdded one.");
+    expect(result.messages).toEqual([
+      ...priorMessages,
+      { role: "user", content: "review the playlist. suggest two tracks by tori amos." },
+      { role: "assistant", content: result.assistantMessage.content }
+    ]);
+    expect(result.review?.reviewSuggestions[0]?.id).toBe("review-suggestion-1");
+    expect(result.reviewHistoryEntry).toMatchObject({ kind: "review" });
+    expect(result.curatorHistoryEntry).toMatchObject({ kind: "request", playlistAction: "add" });
+    expect(result.nextPlaylist?.tracks.map((item) => item.title)).toEqual(["First", "Second"]);
+  });
+
+  it("keeps review results visible when the curator half fails", async () => {
+    const base = playlist([track()]);
+
+    const result = await runMixedReviewAndCuratorWorkflow(
+      { messages: [], outgoing: "review this playlist and suggest two tracks.", playlist: base },
+      {
+        onProgress: () => undefined,
+        analyze: async () => analysisResponse({
+          curatorTake: "The palette is clear enough to critique."
+        }),
+        sendMessage: async () => {
+          throw new Error("Network down.");
+        }
+      }
+    );
+
+    expect(result.review?.curatorTake).toBe("The palette is clear enough to critique.");
+    expect(result.reviewHistoryEntry).toMatchObject({ kind: "review" });
+    expect(result.curatorHistoryEntry).toMatchObject({
+      kind: "error",
+      error: "CutList could not reach the provider. Check your internet connection or local Ollama server, then try again. Your playlist is unchanged."
+    });
+    expect(result.assistantMessage.content).toContain("Review:\nThe palette is clear enough to critique.");
+    expect(result.assistantMessage.content).toContain("Curator action:\nCutList could not reach the provider.");
+    expect(result.nextPlaylist).toBeUndefined();
   });
 
   it("turns curator request errors into assistant and history results", async () => {

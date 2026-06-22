@@ -64,6 +64,9 @@ function containsAddIntent(text: string): boolean {
   if (/\b(?:too|bit|little)\s+hard\s+to\s+find\b/i.test(text) || /\beasier\s+to\s+find\b/i.test(text)) {
     return false;
   }
+  if (/\b(?:without\b(?:.{0,40})?\badd(?:ing)?|not\s+add(?:ing)?|don't\s+add|do not\s+add|never\s+add)\b/i.test(text)) {
+    return false;
+  }
   return !/\badd(?:ing)?\s+(?:a\s+)?(?:constraint|rule)\b/i.test(text) &&
     !/\bsuggest\s+(?:cuts?|removals?|deletions?|drops?|edits?)\b/i.test(text) && (
     /\b(?:add|adding|find|give me|recommend|suggest|fill|round out|build|pump|extend|grow)\b/i.test(text) ||
@@ -76,6 +79,9 @@ function containsReplaceIntent(text: string): boolean {
 }
 
 function containsRemoveIntent(text: string): boolean {
+  if (/\b(?:without\b(?:.{0,40})?\bremov(?:e|ing)|not\s+remov(?:e|ing)|don't\s+remove|do not\s+remove|never\s+remove)\b/i.test(text)) {
+    return false;
+  }
   return /\b(remove|removing|delete|drop|cut|cuts|prune|clear|trim)\b/i.test(text) || /\bget rid of\b/i.test(text);
 }
 

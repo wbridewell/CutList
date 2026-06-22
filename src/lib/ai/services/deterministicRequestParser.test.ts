@@ -35,6 +35,17 @@ describe("deterministicRequestParser", () => {
     expect(result.deterministicPersistentConstraints.maxTracksPerArtist).toBe(2);
   });
 
+  it("treats without-adding-or-removing reorder language as reorder only", () => {
+    const result = parseDeterministicRequest(
+      "Reorder the playlist to improve flow without adding or removing songs."
+    );
+
+    expect(result.operationSignals.reorder).toBe(true);
+    expect(result.operationSignals.addition).toBe(false);
+    expect(result.operationSignals.removal).toBe(false);
+    expect(result.sequencingSignals.clauses.flatMap((clause) => clause.operations)).toEqual(["reorder"]);
+  });
+
   it("keeps rule-update-plus-remove prompts as both a persistent rule and an edit step", () => {
     const result = parseDeterministicRequest(
       "add a constraint that no more than 2 songs by the same artist can appear on the playlist and then remove tracks that violate that constraint"
@@ -58,5 +69,26 @@ describe("deterministicRequestParser", () => {
 
     expect(result.deterministicPersistentConstraints.excludedArtists).toBeUndefined();
     expect(result.deterministicRequestScopedConstraints.excludedArtists).toEqual(["motley crue"]);
+  });
+
+  it("extracts artist-targeted addition requests as request-scoped required artists", () => {
+    const result = parseDeterministicRequest("suggest two tracks by tori amos");
+
+    expect(result.deterministicPersistentConstraints.requiredArtists).toBeUndefined();
+    expect(result.deterministicRequestScopedConstraints.requiredArtists).toEqual(["tori amos"]);
+  });
+
+  it("currently reads the weak-link review prompt as analyze plus structural shape signals", () => {
+    const result = parseDeterministicRequest(
+      "Review this playlist and name the two tracks that weaken its identity."
+    );
+
+    expect(result.operationSignals.analyze).toBe(true);
+    expect(result.operationSignals.addition).toBe(false);
+    expect(result.operationSignals.removal).toBe(false);
+    expect(result.operationSignals.reorder).toBe(false);
+    expect(result.operationSignals.shapeStrength).toBe("strong");
+    expect(result.countSignals.requestedAddCount).toBe(2);
+    expect(result.sequencingSignals.clauses.flatMap((clause) => clause.operations)).toEqual(["analyze"]);
   });
 });

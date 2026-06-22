@@ -600,6 +600,7 @@ export const ConversationContextSchema = z.object({
 
 export const PlaylistMessageRequestSchema = z.object({
   playlist: PlaylistStateSchema,
+  requestId: z.string().min(1).max(120).optional(),
   userMessage: z.string().min(1).max(8000),
   conversationContext: ConversationContextSchema.optional()
 });
@@ -655,6 +656,7 @@ export const ImportChatResponseSchema = z.object({
 
 export const AnalyzePlaylistRequestSchema = z.object({
   playlist: PlaylistStateSchema,
+  requestId: z.string().min(1).max(120).optional(),
   userQuestion: z.string().max(4000).optional(),
   conversationContext: ConversationContextSchema.optional()
 });

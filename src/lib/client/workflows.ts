@@ -19,6 +19,7 @@ import {
   type ChatMessage,
   type RequestHistoryEntry
 } from "@/lib/playlist/collaboration";
+import { emitReviewRoutingTrace } from "@/lib/debug/reviewRouting";
 import { addTracksToPlaylist, applyCuratorResponse, insertTracksAfterTrack, isDuplicateTrack, removeTracksFromPlaylist, touchPlaylist } from "@/lib/playlist/state";
 import { parseTrackRowsFromText, type ParsedTrackLine } from "@/lib/playlist/io/textImport";
 import type {
@@ -32,6 +33,13 @@ import type {
   ReviewSuggestion
 } from "@/types/playlist";
 
+export type ComposerRequestKind = "review_only" | "curator_only" | "mixed_review_and_curator";
+
+export type MixedComposerRequestPrompts = {
+  reviewPrompt: string;
+  curatorPrompt: string;
+};
+
 export type ClientWorkflowResult = {
   assistantMessage: ChatMessage;
   clearInput?: boolean;
@@ -44,6 +52,16 @@ export type ClientWorkflowResult = {
 export type CuratorRequestWorkflowResult = ClientWorkflowResult & {
   data?: CuratorResponse;
   messages: ChatMessage[];
+};
+
+export type MixedReviewAndCuratorWorkflowResult = {
+  assistantMessage: ChatMessage;
+  clearInput?: boolean;
+  curatorHistoryEntry?: RequestHistoryEntry;
+  messages: ChatMessage[];
+  nextPlaylist?: PlaylistState;
+  review?: AnalyzePlaylistResponse;
+  reviewHistoryEntry?: RequestHistoryEntry;
 };
 
 type CuratorRequestDependencies = {
@@ -67,11 +85,96 @@ type AnalyzeWorkflowDependencies = {
   analyze?: typeof analyzePlaylist;
 };
 
+type MixedReviewAndCuratorWorkflowDependencies = CuratorRequestDependencies & AnalyzeWorkflowDependencies;
+
 export function effectiveDiscoveryRadiusForRequest(
   playlist: PlaylistState,
   userMessage: string
 ): DiscoveryRadius {
   return parseDiscoveryRadiusOverride(userMessage) ?? playlist.discoveryRadius ?? "moderate";
+}
+
+function hasReviewSignals(userMessage: string): boolean {
+  return /\b(review|analy[sz]e|critique|what(?:'s| is) working|what should happen next|which tracks? weaken|what weakens|what doesn'?t fit)\b/i.test(userMessage);
+}
+
+function hasCuratorSignals(userMessage: string): boolean {
+  return /\b(add|adding|find|give me|recommend|suggest\b.*\b(?:songs?|tracks?)|replace|replacing|swap|substitute|remove|removing|delete|drop|cut|re-?order|reorganize|resequence|sequence|arrange|rearrange)\b/i.test(userMessage);
+}
+
+function cleanComposerClause(clause: string): string {
+  return clause
+    .replace(/^(?:and|then|and then|after that|afterwards|next)\b[\s,:-]*/i, "")
+    .trim();
+}
+
+function splitComposerIntentClauses(userMessage: string): string[] {
+  const normalized = userMessage.replace(/\s+/g, " ").trim();
+  if (!normalized) {
+    return [];
+  }
+
+  const signalStart = "(?:review|analy[sz]e|critique|what(?:'s| is) working|what should happen next|which tracks? weaken|what weakens|what doesn'?t fit|add|adding|find|give me|recommend|suggest\\b|replace|replacing|swap|substitute|remove|removing|delete|drop|cut|re-?order|reorganize|resequence|sequence|arrange|rearrange)";
+  const clauseDelimited = normalized
+    .replace(/([.!?;])\s+/g, "$1\n")
+    .replace(/\s*,\s*(?=(?:then|and then|after that|afterwards|next)\b)/gi, "\n")
+    .replace(new RegExp(`\\b(?:and|then|and then|after that|afterwards|next)\\b\\s+(?=${signalStart})`, "gi"), "\n");
+
+  return clauseDelimited
+    .split("\n")
+    .map(cleanComposerClause)
+    .filter((clause) => clause.length > 0);
+}
+
+export function splitMixedComposerRequest(userMessage: string): MixedComposerRequestPrompts {
+  const clauses = splitComposerIntentClauses(userMessage);
+  if (clauses.length === 0) {
+    const fallback = userMessage.trim();
+    return { reviewPrompt: fallback, curatorPrompt: fallback };
+  }
+
+  const reviewClauses = clauses.filter((clause) => hasReviewSignals(clause) && !hasCuratorSignals(clause));
+  const curatorClauses = clauses.filter((clause) => hasCuratorSignals(clause) && !hasReviewSignals(clause));
+
+  if (reviewClauses.length === 0 || curatorClauses.length === 0) {
+    const fallback = userMessage.trim();
+    return { reviewPrompt: fallback, curatorPrompt: fallback };
+  }
+
+  return {
+    reviewPrompt: reviewClauses.join(" "),
+    curatorPrompt: curatorClauses.join(" ")
+  };
+}
+
+export function reviewPromptForComposerRequest(userMessage: string): string {
+  const trimmed = userMessage.trim();
+  if (!trimmed) {
+    return "Review this playlist.";
+  }
+
+  if (hasReviewSignals(trimmed) && hasCuratorSignals(trimmed)) {
+    return splitMixedComposerRequest(trimmed).reviewPrompt;
+  }
+
+  return trimmed;
+}
+
+export function classifyComposerRequest(userMessage: string, playlist: PlaylistState): ComposerRequestKind {
+  if (playlist.tracks.length === 0) {
+    return "curator_only";
+  }
+
+  const review = hasReviewSignals(userMessage);
+  const curator = hasCuratorSignals(userMessage);
+
+  if (review && curator) {
+    return "mixed_review_and_curator";
+  }
+  if (review) {
+    return "review_only";
+  }
+  return "curator_only";
 }
 
 function validSubsetOrder(playlist: PlaylistState, orderedTrackIds: string[] | undefined, removedTrackIds: string[]): orderedTrackIds is string[] {
@@ -181,16 +284,22 @@ export async function runCuratorRequestWorkflow(
     messages: ChatMessage[];
     outgoing: string;
     playlist: PlaylistState;
+    requestId?: string;
   },
   dependencies: CuratorRequestDependencies
 ): Promise<CuratorRequestWorkflowResult> {
   const requestMessages = createRequestMessageList(input.messages, input.outgoing);
+  emitReviewRoutingTrace("workflow.runCuratorRequest.start", {
+    requestId: input.requestId ?? null,
+    outgoing: input.outgoing
+  });
 
   try {
     const sendMessage = dependencies.sendMessage ?? sendPlaylistMessageStream;
     const data = await sendMessage(
       {
         playlist: input.playlist,
+        requestId: input.requestId,
         userMessage: input.outgoing,
         conversationContext: buildConversationContext(input.messages)
       },
@@ -200,6 +309,11 @@ export async function runCuratorRequestWorkflow(
       ? applyCuratorResponse(input.playlist, data)
       : undefined;
     const assistantContent = composeCuratorAssistantMessage(data, input.playlist);
+    emitReviewRoutingTrace("workflow.runCuratorRequest.result", {
+      requestId: input.requestId ?? null,
+      assistantContainsReordered: assistantContent.includes("Reordered "),
+      playlistAction: data.playlistUpdate?.action ?? null
+    });
     const historyEntry = createRequestHistoryEntry(
       input.outgoing,
       data.message,
@@ -365,6 +479,7 @@ export function composeAnalyzeAssistantMessage(data: AnalyzePlaylistResponse): s
 export async function runAnalyzeWorkflow(
   input: {
     playlist: PlaylistState;
+    requestId?: string;
     userMessage: string;
     messages?: ChatMessage[];
   },
@@ -380,13 +495,23 @@ export async function runAnalyzeWorkflow(
   }
 
   try {
+    emitReviewRoutingTrace("workflow.runAnalyze.start", {
+      requestId: input.requestId ?? null,
+      userMessage: input.userMessage
+    });
     const analyze = dependencies.analyze ?? analyzePlaylist;
     const data = await analyze(
       input.playlist,
       input.userMessage || undefined,
-      buildConversationContext(input.messages ?? [])
+      buildConversationContext(input.messages ?? []),
+      input.requestId
     );
     const assistantContent = composeAnalyzeAssistantMessage(data);
+    emitReviewRoutingTrace("workflow.runAnalyze.result", {
+      requestId: input.requestId ?? null,
+      assistantContainsReordered: assistantContent.includes("Reordered "),
+      reviewSuggestionTypes: data.reviewSuggestions.map((suggestion) => `${suggestion.type}:${suggestion.applicationMode}`)
+    });
     return {
       assistantMessage: { role: "assistant", content: assistantContent },
       clearInput: true,
@@ -396,6 +521,71 @@ export async function runAnalyzeWorkflow(
   } catch (error) {
     return workflowErrorResult("Review playlist", error, "Analysis failed.");
   }
+}
+
+export function composeMixedReviewAndCuratorAssistantMessage(
+  reviewMessage: string,
+  curatorMessage: string
+): string {
+  const parts = [
+    reviewMessage.trim() ? `Review:\n${reviewMessage.trim()}` : null,
+    curatorMessage.trim() ? `Curator action:\n${curatorMessage.trim()}` : null
+  ].filter(Boolean);
+  return parts.join("\n\n");
+}
+
+export async function runMixedReviewAndCuratorWorkflow(
+  input: {
+    messages: ChatMessage[];
+    outgoing: string;
+    playlist: PlaylistState;
+    requestId?: string;
+  },
+  dependencies: MixedReviewAndCuratorWorkflowDependencies
+): Promise<MixedReviewAndCuratorWorkflowResult> {
+  const requestMessages = createRequestMessageList(input.messages, input.outgoing);
+  const { reviewPrompt, curatorPrompt } = splitMixedComposerRequest(input.outgoing);
+  emitReviewRoutingTrace("workflow.runMixed.start", {
+    requestId: input.requestId ?? null,
+    outgoing: input.outgoing,
+    reviewPrompt,
+    curatorPrompt
+  });
+  const reviewResult = await runAnalyzeWorkflow(
+    {
+      playlist: input.playlist,
+      requestId: input.requestId,
+      userMessage: reviewPrompt,
+      messages: input.messages
+    },
+    { analyze: dependencies.analyze }
+  );
+  const curatorResult = await runCuratorRequestWorkflow(
+    {
+      ...input,
+      outgoing: curatorPrompt
+    },
+    {
+      onProgress: dependencies.onProgress,
+      sendMessage: dependencies.sendMessage,
+      signal: dependencies.signal
+    }
+  );
+
+  const assistantContent = composeMixedReviewAndCuratorAssistantMessage(
+    reviewResult.assistantMessage.content,
+    curatorResult.assistantMessage.content
+  );
+
+  return {
+    assistantMessage: { role: "assistant", content: assistantContent },
+    clearInput: reviewResult.clearInput || curatorResult.clearInput,
+    curatorHistoryEntry: curatorResult.historyEntry,
+    messages: createCompletedRequestMessages(requestMessages, assistantContent),
+    nextPlaylist: curatorResult.nextPlaylist,
+    review: reviewResult.review,
+    reviewHistoryEntry: reviewResult.historyEntry
+  };
 }
 
 function validCompleteOrder(playlist: PlaylistState, orderedTrackIds: string[] | undefined): orderedTrackIds is string[] {

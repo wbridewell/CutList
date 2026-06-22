@@ -14,8 +14,8 @@ const personaOptions: Array<{
     persona: "razor",
     name: "The Razor",
     shortLabel: "Razor",
-    description: "Lean, cutting, impatient with filler.",
-    sample: "\"This has pressure, but the middle is loafing.\""
+    description: "Lean, exacting, and quietly persuasive.",
+    sample: "\"The pressure is there. Let me tighten the middle so the payoff actually lands.\""
   },
   {
     persona: "archivist",

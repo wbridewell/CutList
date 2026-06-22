@@ -20,7 +20,7 @@ import { isTauriApp } from "@/lib/client/tauriRuntime";
 export type VerifySeedsResponse = Awaited<ReturnType<typeof invokeDesktopVerify>>;
 
 export async function sendPlaylistMessageStream(
-  input: { playlist: PlaylistState; userMessage: string; conversationContext?: ConversationContext },
+  input: { playlist: PlaylistState; requestId?: string; userMessage: string; conversationContext?: ConversationContext },
   callbacks: { onProgress: (message: string) => void; signal?: AbortSignal }
 ): Promise<CuratorResponse> {
   return invokeDesktopMessage(input, callbacks);
@@ -37,9 +37,10 @@ export async function importDraftOrChat(text: string): Promise<ImportChatRespons
 export async function analyzePlaylist(
   playlist: PlaylistState,
   userQuestion?: string,
-  conversationContext?: ConversationContext
+  conversationContext?: ConversationContext,
+  requestId?: string
 ): Promise<AnalyzePlaylistResponse> {
-  return invokeDesktopAnalyze({ playlist, userQuestion, conversationContext });
+  return invokeDesktopAnalyze({ playlist, requestId, userQuestion, conversationContext });
 }
 
 export async function downloadPlaylistExport(

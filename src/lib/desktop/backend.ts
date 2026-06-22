@@ -10,6 +10,7 @@ import {
 } from "@/lib/ai/llmConfig";
 import { handleAnalyzePlaylist, handleImportChat, handlePlaylistMessage, type CuratorProgressEvent } from "@/lib/ai/curator";
 import type { CuratorRunOptions } from "@/lib/ai/curatorTypes";
+import { emitReviewRoutingTrace } from "@/lib/debug/reviewRouting";
 import {
   CuratorResponseSchema,
   AnalyzePlaylistRequestSchema,
@@ -119,9 +120,14 @@ export async function desktopPlaylistMessage(
   options: CuratorRunOptions = {}
 ) {
   const input = PlaylistMessageRequestSchema.parse(payload);
+  emitReviewRoutingTrace("backend.desktopPlaylistMessage", {
+    requestId: input.requestId ?? null,
+    userMessage: input.userMessage
+  });
   const response = await handlePlaylistMessage(input.playlist, input.userMessage, {
     ...options,
-    conversationContext: input.conversationContext
+    conversationContext: input.conversationContext,
+    requestId: input.requestId
   });
   return CuratorResponseSchema.parse(response);
 }
@@ -138,10 +144,14 @@ export async function desktopImportChat(payload: DesktopImportPayload) {
 
 export async function desktopAnalyzePlaylist(payload: DesktopAnalyzePayload) {
   const input = AnalyzePlaylistRequestSchema.parse(payload);
+  emitReviewRoutingTrace("backend.desktopAnalyzePlaylist", {
+    requestId: input.requestId ?? null,
+    userQuestion: input.userQuestion ?? null
+  });
   return AnalyzePlaylistResponseSchema.parse(await handleAnalyzePlaylist(
     input.playlist,
     input.userQuestion,
-    { conversationContext: input.conversationContext }
+    { conversationContext: input.conversationContext, requestId: input.requestId }
   ));
 }
 
