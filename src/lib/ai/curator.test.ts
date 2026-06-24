@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { handleAnalyzePlaylist, handleImportChat, handlePlaylistMessage } from "@/lib/ai/curator";
 import { mergeConstraintLayers } from "@/lib/ai/services/instructionIntent";
+import { resolveOperatorPlan } from "@/lib/ai/services/operatorPlanner";
 import { getJsonFromLLM, getLLMProvider } from "@/lib/ai/llmClient";
 import { verifyTrack, verifyTracks } from "@/lib/music/verifyTrack";
 import type { PlaylistState, Track } from "@/types/playlist";
@@ -17,6 +18,10 @@ vi.mock("@/lib/ai/llmClient", () => ({
 vi.mock("@/lib/music/verifyTrack", () => ({
   verifyTracks: vi.fn(async () => ({ verified: [], rejected: [] })),
   verifyTrack: vi.fn()
+}));
+
+vi.mock("@/lib/ai/services/operatorPlanner", () => ({
+  resolveOperatorPlan: vi.fn()
 }));
 
 const playlist: PlaylistState = {
@@ -71,6 +76,71 @@ describe("curator LLM boundaries", () => {
     vi.mocked(getLLMProvider).mockReturnValue("none");
     vi.mocked(verifyTracks).mockResolvedValue({ verified: [], rejected: [] });
     vi.mocked(verifyTrack).mockReset();
+    vi.mocked(resolveOperatorPlan).mockImplementation(async (_playlist, userMessage) => {
+      const trimmed = userMessage.trim();
+      const isPastedTrackList = /\bname\tartist\b/i.test(trimmed) || /\n.+\t.+/.test(trimmed);
+      const isConversational = /^(?:hello|hi|hey)\b/i.test(trimmed);
+      return {
+        routeFamily: isPastedTrackList ? "import" : isConversational ? "conversational" : "curator",
+        executionPolicy: isPastedTrackList || isConversational ? "read_only" : "mutating",
+        planTemplate: isPastedTrackList ? "import_request" : isConversational ? "conversational_reply" : "curator_mutation",
+        reviewMode: null,
+        operators: [{ kind: "summarize_for_user" }],
+        normalizedIntent: {
+          operationType: "other",
+          operationConfidence: "low",
+          requestedAddCount: null,
+          targetTotalTrackCount: null,
+          replacementCount: null,
+          verifiedRules: {},
+          curatorGuidance: {},
+          persistentVerifiedRules: {},
+          persistentGuidance: {},
+          requestScopedVerifiedRules: {},
+          requestScopedGuidance: {},
+          persistentConstraints: {},
+          requestScopedConstraints: {},
+          activeConstraints: {},
+          notes: [],
+          raw: null
+        },
+        boundEntities: {
+          namedTracks: [],
+          namedTransition: null,
+          targetSpan: null,
+          candidateCount: null,
+          maxTrackDurationMs: null,
+          avoidArtistRepeats: false,
+          preserve: [],
+          avoid: []
+        },
+        declaredEntities: { namedTracks: [], transition: null, targetSpan: null },
+        parameterHints: {
+          requestedCount: null,
+          targetTotalTrackCount: null,
+          replacementCount: null,
+          maxTrackDurationMs: null,
+          avoidArtistRepeats: false,
+          preserve: [],
+          avoid: []
+        },
+        deterministicSignals: {
+          hasReviewSignals: false,
+          hasCuratorSignals: !isPastedTrackList && !isConversational,
+          hasNonModificationDirective: false,
+          hasPastedTracks: isPastedTrackList,
+          hasMixedIntent: false,
+          trackCount: _playlist.tracks.length,
+          addition: false,
+          removal: false,
+          replacement: false,
+          shapeStrength: "none"
+        },
+        confidence: "high",
+        planningNotes: ["Test planner stub."],
+        instructionIntentStatus: "not_attempted"
+      } as any;
+    });
   });
 
   it("imports tabular track lists without calling the LLM", async () => {
@@ -83,7 +153,7 @@ describe("curator LLM boundaries", () => {
   it("handles pasted tabular natural requests without calling the LLM", async () => {
     const result = await handlePlaylistMessage(playlist, "Name\tArtist\tAlbum\nPink Moon\tNick Drake\tPink Moon");
 
-    expect(result.message).toContain("detected a pasted track list");
+    expect(result.message).toContain("import request");
     expect(verifyTracks).toHaveBeenCalled();
     expect(getJsonFromLLM).not.toHaveBeenCalled();
   });

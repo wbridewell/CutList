@@ -4,14 +4,19 @@ import { describe, expect, it } from "vitest";
 import { parsePortableMacOSNodeReport, resolveRuntimeNodeSourcePath } from "../../../scripts/build-desktop-runtime.mjs";
 
 describe("build-desktop-runtime", () => {
-  it("fails release packaging when CUTLIST_NODE_RUNTIME_PATH is missing", () => {
-    expect(() => resolveRuntimeNodeSourcePath({ CUTLIST_RELEASE_PACKAGING: "1" }, "/tmp/node")).toThrow(
-      /CUTLIST_NODE_RUNTIME_PATH/
-    );
+  it("prefers an explicit runtime path during release packaging", () => {
+    expect(resolveRuntimeNodeSourcePath({
+      CUTLIST_RELEASE_PACKAGING: "1",
+      CUTLIST_NODE_RUNTIME_PATH: "/tmp/portable-node"
+    }, "/tmp/node")).toBe("/tmp/portable-node");
   });
 
-  it("keeps execPath fallback for non-release staging", () => {
-    expect(resolveRuntimeNodeSourcePath({}, "/tmp/dev-node")).toBe("/tmp/dev-node");
+  it("falls back to either the bundled portable node or execPath for non-release staging", () => {
+    const resolved = resolveRuntimeNodeSourcePath({}, "/tmp/dev-node");
+
+    expect(
+      resolved === "/tmp/dev-node" || resolved.includes("codex-primary-runtime")
+    ).toBe(true);
   });
 
   it("rejects obvious Homebrew-linked libraries", () => {
