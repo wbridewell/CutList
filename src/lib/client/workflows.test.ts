@@ -75,6 +75,7 @@ function playlist(tracks: Track[] = []): PlaylistState {
 
 function analysisResponse(overrides: Partial<AnalyzePlaylistResponse> = {}): AnalyzePlaylistResponse {
   return {
+    reviewMode: overrides.reviewMode ?? "full_critique",
     curatorTake: overrides.curatorTake ?? "This set has a real center, but the sequence still wants firmer hands.",
     message: overrides.message ?? "This works.",
     strengths: overrides.strengths ?? ["Strong opener"],
@@ -141,6 +142,8 @@ describe("client workflows", () => {
     const base = playlist([track()]);
 
     expect(classifyComposerRequest("review the playlist", base)).toBe("review_only");
+    expect(classifyComposerRequest("Identify the single biggest structural problem in this playlist. Focus on identity, pacing, transitions, and version risks. Give a focused diagnosis, not a full rewrite.", base)).toBe("review_only");
+    expect(classifyComposerRequest("Reorder the playlist to improve flow, but do not modify the playlist.", base)).toBe("review_only");
     expect(classifyComposerRequest("suggest two tracks by tori amos", base)).toBe("curator_only");
     expect(classifyComposerRequest("review the playlist. suggest two tracks by tori amos.", base)).toBe("mixed_review_and_curator");
     expect(classifyComposerRequest("review this, then reorder it", base)).toBe("mixed_review_and_curator");
@@ -166,6 +169,12 @@ describe("client workflows", () => {
   it("derives a critique-only prompt for review button flows", () => {
     expect(reviewPromptForComposerRequest("")).toBe("Review this playlist.");
     expect(reviewPromptForComposerRequest("review the playlist and add two tori amos tracks")).toBe("review the playlist");
+    expect(reviewPromptForComposerRequest("Reorder the playlist to improve flow, but do not modify the playlist.")).toBe(
+      "Reorder the playlist to improve flow, but do not modify the playlist."
+    );
+    expect(reviewPromptForComposerRequest("Identify the single biggest structural problem in this playlist. Focus on identity, pacing, transitions, and version risks. Give a focused diagnosis, not a full rewrite.")).toBe(
+      "Identify the single biggest structural problem in this playlist. Focus on identity, pacing, transitions, and version risks. Give a focused diagnosis, not a full rewrite."
+    );
     expect(reviewPromptForComposerRequest("Review this playlist and name the two tracks that weaken its identity.")).toBe(
       "Review this playlist and name the two tracks that weaken its identity."
     );
@@ -459,11 +468,83 @@ describe("client workflows", () => {
     expect(message).toContain("Intent:");
     expect(message).toContain("Track roles:");
     expect(message).toContain("Transitions:");
-    expect(message).toContain("Suggested edits:");
+    expect(message).toContain("Suggested follow-ups:");
     expect(message.indexOf("Playlist identity: Nocturnal pressure.")).toBeLessThan(message.indexOf("Intent: Rise without losing dread."));
   });
 
-  it("persists review suggestions as open issues in review history entries", async () => {
+  it("renders focused transition repair reviews with named bridge tracks", () => {
+    const message = composeAnalyzeAssistantMessage(analysisResponse({
+      reviewMode: "focused_transition_repair",
+      curatorTake: "The handoff needs a cold decompression corridor.",
+      transitionReview: [{
+        fromTrackId: "track-1",
+        toTrackId: "track-2",
+        issueType: "abrupt_energy_jump",
+        summary: "Firestarter drops straight into a void before Roads.",
+        suggestedRepair: "Bridge it.",
+        confidence: "high",
+        basis: "model_judgment"
+      }],
+      reviewSuggestions: [{
+        id: "bridge-1",
+        type: "add_bridge",
+        applicationMode: "informational",
+        affectedTrackIds: ["track-1", "track-2"],
+        rationale: "Nine Inch Nails - Closer: Acts as a heavy hydraulic brake that keeps the mechanical pulse alive.",
+        intentPreservation: "Keeps the pressure intact.",
+        risk: null,
+        confidence: "high",
+        basis: "model_judgment",
+        candidate: {
+          title: "Closer",
+          artist: "Nine Inch Nails",
+          album: null,
+          reason: "Cold mid-tempo pressure.",
+          vibeTags: [],
+          expectedFitNotes: "",
+          energy: 7
+        },
+        suggestedPrompt: "Add Nine Inch Nails - Closer as a bridge."
+      }]
+    }));
+
+    expect(message).toContain("Bridge options:");
+    expect(message).toContain("Nine Inch Nails - Closer");
+    expect(message).toContain("heavy hydraulic brake");
+    expect(message).not.toContain("Curator judgment:");
+  });
+
+  it("includes track labels in weak-link review summaries", () => {
+    const tracks = playlist([
+      track({ id: "track-1", artist: "Talking Heads", title: "This Must Be the Place" }),
+      track({ id: "track-2", artist: "M83", title: "Midnight City" })
+    ]);
+    const message = composeAnalyzeAssistantMessage(analysisResponse({
+      reviewMode: "weak_links_only",
+      curatorTake: "We are cutting the tourist stops.",
+      weakLinks: [{
+        trackId: "track-1",
+        reason: "The track introduces a pop-brightness that acts as dead weight against the surrounding industrial and electronic tension."
+      }],
+      reviewSuggestions: [{
+        id: "remove-1",
+        type: "remove",
+        applicationMode: "informational",
+        affectedTrackIds: ["track-1"],
+        rationale: "Eliminating this track removes the most significant anchor of brightness that fights the playlist's core industrial identity.",
+        intentPreservation: "Keeps the colder center intact.",
+        risk: null,
+        confidence: "high",
+        basis: "model_judgment",
+        suggestedPrompt: null
+      }]
+    }), tracks);
+
+    expect(message).toContain("Talking Heads - This Must Be the Place");
+    expect(message).toContain("Suggested cuts:");
+  });
+
+  it("persists review suggestions as non-actionable review history context", async () => {
     const result = await runAnalyzeWorkflow(
       { playlist: playlist([track()]), userMessage: "Review this." },
       {
@@ -484,12 +565,7 @@ describe("client workflows", () => {
     );
 
     expect(result.historyEntry?.reviewSuggestions?.[0].id).toBe("review-suggestion-1");
-    expect(result.historyEntry?.issueStatuses).toEqual([{
-      issueId: "review-suggestion-1",
-      issueKind: "review_suggestion",
-      status: "open",
-      actedAt: null
-    }]);
+    expect(result.historyEntry?.issueStatuses).toEqual([]);
   });
 
   it("does not offer an apply action for informational reorder notes", () => {

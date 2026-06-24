@@ -7,14 +7,10 @@ export function getActionableReviewSuggestions(
   ignoredSuggestionIds: Set<string>,
   sentSuggestionIds: Set<string>
 ): ReviewSuggestion[] {
-  if (!review) {
-    return [];
-  }
-
-  return review.reviewSuggestions.filter((suggestion) =>
-    !dismissedSuggestionIds.has(suggestion.id) &&
-    !ignoredSuggestionIds.has(suggestion.id) &&
-    !appliedSuggestionIds.has(suggestion.id) &&
-    !sentSuggestionIds.has(suggestion.id)
-  );
+  void review;
+  void appliedSuggestionIds;
+  void dismissedSuggestionIds;
+  void ignoredSuggestionIds;
+  void sentSuggestionIds;
+  return [];
 }

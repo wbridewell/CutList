@@ -205,6 +205,7 @@ export const baseRejectedEntry: RequestHistoryEntry = {
 };
 
 export const baseReview: AnalyzePlaylistResponse = {
+  reviewMode: "full_critique",
   message: "The playlist has a strong front-half identity, but the middle gets congested and the ending does not fully resolve the pressure.",
   strengths: ["The opener and first transition are convincing.", "The tonal palette is coherent."],
   weakLinks: [{ trackId: "track-2", reason: "Breaks explicit preference and doubles the same artist too early." }],

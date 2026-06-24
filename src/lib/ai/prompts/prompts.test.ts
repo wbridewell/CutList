@@ -4,8 +4,10 @@ import {
   critiquePrompt,
   getCuratorPersona,
   instructionIntentPrompt,
+  operatorPlanPrompt,
   playlistRemovalPrompt,
-  playlistShapePrompt
+  playlistShapePrompt,
+  transitionRepairPrompt
 } from "@/lib/ai/prompts";
 import { readLocalLLMSettings } from "@/lib/ai/llmConfig";
 import type { PlaylistState } from "@/types/playlist";
@@ -79,6 +81,8 @@ describe("curator prompt personas", () => {
     expect(intentPrompt).toContain("scopeIntent.requestScopedGuidanceFields");
     expect(intentPrompt).toContain("prefer add, remove, or replace as operationIntent.type");
     expect(intentPrompt).toContain("Return every top-level key exactly once");
+    expect(intentPrompt).toContain("routingIntent.reviewMode");
+    expect(intentPrompt).toContain("focused_transition_repair");
     expect(intentPrompt).toContain("\"replace the weakest 3 tracks\"");
     expect(intentPrompt).toContain("\"bring this to 15 total\"");
   });
@@ -162,7 +166,7 @@ describe("curator prompt personas", () => {
     expect(critique).toContain("Treat intentSummary.playlistIdentity as the critique's thesis line.");
     expect(critique).toContain("Use curatorTake as the compact voice burst.");
     expect(critique).toContain("Prefer sensory, scene, or tension language over generic filler");
-    expect(critique).toContain("Every reviewSuggestion must be safe to inspect before application.");
+    expect(critique).toContain("Review mode is non-mutating. Every reviewSuggestion must use applicationMode = informational");
     expect(critique).toContain("Return curatorTake as the Curator's compact human read of the playlist");
     expect(critique).toContain("Return one JSON object only.");
     expect(critique).toContain("reviewSuggestions must be [] when you have no safe suggestion to make.");
@@ -206,6 +210,43 @@ describe("curator prompt personas", () => {
     expect(prompt).toContain("explicitly asking for playlist compression");
     expect(prompt).toContain("Prefer section-level compress_section suggestions");
     expect(prompt).toContain("Aim toward 12 total tracks.");
+  });
+
+  it("adds focused transition-repair guidance for narrow bridge reviews", () => {
+    const prompt = critiquePrompt(playlist, "Repair only the transition from Firestarter into Roads. Recommend 3 bridge tracks.", {
+      reviewMode: "focused_transition_repair"
+    });
+
+    expect(prompt).toContain("Focused review mode: focused_transition_repair.");
+    expect(prompt).toContain("Discuss only the named transition or handoff.");
+    expect(prompt).toContain("reviewSuggestions may include only add_bridge suggestions");
+  });
+
+  it("builds a dedicated transition-repair prompt for exact bridge options", () => {
+    const prompt = transitionRepairPrompt(
+      playlist,
+      "Repair only the transition from Firestarter into Roads. Recommend 3 bridge tracks.",
+      { requestedCount: 3 }
+    );
+
+    expect(prompt).toContain("Repair this playlist transition without mutating the playlist.");
+    expect(prompt).toContain("Return exactly 3 bridgeOptions.");
+    expect(prompt).toContain("Do not widen to full-playlist critique.");
+    expect(prompt).toContain("Do not return critique scaffolds");
+  });
+
+  it("builds a typed operator-plan prompt for all request families", () => {
+    const prompt = operatorPlanPrompt(
+      playlist,
+      "Repair only the transition from Firestarter into Roads. Do not remove or reorder existing tracks. Recommend 3 bridge tracks.",
+      { forceReadOnly: true }
+    );
+
+    expect(prompt).toContain("typed operator plan");
+    expect(prompt).toContain("Compose the request from a small operator library");
+    expect(prompt).toContain("Execution policy is forced to read_only");
+    expect(prompt).toContain("resolve_named_tracks");
+    expect(prompt).toContain("per-track duration preferences");
   });
 
   it("requires playlist removal decisions to use existing track ids", () => {

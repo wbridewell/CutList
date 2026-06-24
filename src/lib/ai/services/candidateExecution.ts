@@ -128,11 +128,18 @@ function retryUserMessage(
   ].filter(Boolean).join("\n");
 }
 
+function summarizeTracks(tracks: Track[], limit = 4): string {
+  return tracks.slice(0, limit).map((track) => `${track.artist} - ${track.title}`).join("; ");
+}
+
 function composeCuratorSummary(input: {
+  acceptedTracks: Track[];
   acceptedCount: number;
   batchMessages: string[];
   constraintRemovedTracks: Track[];
   effectiveRequestedCount: number | null;
+  operation: ResolvedCuratorRequestPlan["operation"];
+  replacementRemovedTracks: Track[];
   rejectedCount: number;
   versionCleanup: ResolvedCuratorRequestPlan["preGenerationRemovalPlan"]["versionCleanup"];
 }): string {
@@ -143,11 +150,19 @@ function composeCuratorSummary(input: {
   const constraintRemovalText = input.constraintRemovedTracks.length > 0
     ? `Removed ${input.constraintRemovedTracks.length} track${input.constraintRemovedTracks.length === 1 ? "" : "s"} to satisfy existing playlist constraints before adding replacements.`
     : null;
+  const factualReplacementText = input.operation === "replace" && input.replacementRemovedTracks.length > 0
+    ? [
+      `Removed ${input.replacementRemovedTracks.length} track${input.replacementRemovedTracks.length === 1 ? "" : "s"} for replacement: ${summarizeTracks(input.replacementRemovedTracks)}.`,
+      input.acceptedTracks.length > 0 ? `Added ${input.acceptedTracks.length} replacement track${input.acceptedTracks.length === 1 ? "" : "s"}: ${summarizeTracks(input.acceptedTracks)}.` : null
+    ].filter(Boolean).join(" ")
+    : null;
+  const curatedMessageText = input.operation === "replace" ? null : input.batchMessages.join(" ");
 
   return [
     versionRemovalText,
     constraintRemovalText,
-    ...input.batchMessages,
+    factualReplacementText,
+    curatedMessageText,
     input.acceptedCount > 0 ? `I verified and accepted ${input.acceptedCount} track${input.acceptedCount === 1 ? "" : "s"}${targetText}.` : "I could not accept any new tracks from this pass.",
     input.rejectedCount > 0 ? `I rejected ${input.rejectedCount} candidate${input.rejectedCount === 1 ? "" : "s"} because verification or constraints did not hold.` : null
   ].filter(Boolean).join(" ");
@@ -298,6 +313,10 @@ export async function executeCandidateGeneration(
         break;
       }
 
+      if (blockedCandidates.has(candidateKey(candidate))) {
+        continue;
+      }
+
       blockedCandidates.add(candidateKey(candidate));
       options.onProgress?.({
         stage: "verifying",
@@ -363,10 +382,13 @@ export function composeGenerationResponse(
   }
 ): CuratorResponse {
   const message = composeCuratorSummary({
+    acceptedTracks: result.acceptedTracks,
     acceptedCount: result.acceptedTracks.length,
     batchMessages: result.batchMessages,
     constraintRemovedTracks: plan.preGenerationRemovalPlan.constraintRemovedTracks,
     effectiveRequestedCount: input.effectiveRequestedCount,
+    operation: plan.operation,
+    replacementRemovedTracks: input.preGenerationRemovedTracks,
     rejectedCount: result.rejectedCandidates.length,
     versionCleanup: plan.preGenerationRemovalPlan.versionCleanup
   });

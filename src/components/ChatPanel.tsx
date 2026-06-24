@@ -15,7 +15,8 @@ import {
   acceptManualMatchWorkflow,
   applyVerifiedReviewSuggestionResponse,
   applyReviewSuggestionWorkflow,
-  classifyComposerRequest,
+  buildConversationContext,
+  createCompletedRequestMessages,
   createRequestMessageList,
   playlistChangedMeaningfully,
   promptForReviewSuggestion,
@@ -27,6 +28,7 @@ import {
   runSeedVerificationWorkflow,
   type ClientWorkflowResult
 } from "@/lib/client/workflows";
+import { planPlaylistRequest } from "@/lib/client/playlistApi";
 import { emitReviewRoutingTrace } from "@/lib/debug/reviewRouting";
 import {
   createCuratorUndoHistoryEntry,
@@ -60,6 +62,10 @@ export function shouldClearStaleReviewState(
     return history.length === 0;
   }
   return !history.some((entry) => entry.id === activeReviewEntryId);
+}
+
+export function reviewHasIssues(review: AnalyzePlaylistResponse | null): boolean {
+  return Boolean(review && review.reviewSuggestions.length > 0);
 }
 
 type CuratorTurnUndoState = {
@@ -230,7 +236,7 @@ export function ChatPanel({
     setActiveReview(review);
     setActiveReviewEntryId(reviewEntryId);
     resetReviewState();
-    if (autoOpenIssuesRef.current) {
+    if (autoOpenIssuesRef.current && reviewHasIssues(review)) {
       setActiveDrawerMode("issues");
     }
   }
@@ -482,7 +488,7 @@ export function ChatPanel({
         }
         : result.historyEntry;
       applyComposerRequestResult({
-        messages: result.messages,
+        messages: createCompletedRequestMessages(requestMessages, result.assistantMessage.content),
         nextPlaylist,
         historyEntries: [historyEntry],
         curatorUndoEntry: historyEntry
@@ -559,61 +565,84 @@ export function ChatPanel({
       return;
     }
     const outgoing = userMessage;
-    const requestKind = classifyComposerRequest(outgoing, playlistForComposer);
     const requestId = reviewRoutingRequestId();
-    emitReviewRoutingTrace("chat.sendMessage.route", {
-      requestId,
-      outgoing,
-      requestKind
-    });
     setUserMessage("");
-    if (requestKind === "review_only") {
-      autoOpenIssuesRef.current = true;
-      const requestMessages = createRequestMessageList(messages, reviewRequestLabel(outgoing));
-      onMessagesChange(requestMessages);
-      setBusy(true);
-      try {
+    setBusy(true);
+    try {
+      const requestPlan = await planPlaylistRequest(
+        playlistForComposer,
+        outgoing,
+        buildConversationContext(messages),
+        requestId
+      );
+      emitReviewRoutingTrace("chat.sendMessage.route", {
+        requestId,
+        outgoing,
+        requestKind: requestPlan.operationPlan.kind,
+        routeFamily: requestPlan.routeFamily,
+        executionPolicy: requestPlan.executionPolicy
+      });
+
+      if (requestPlan.routeFamily === "review" && requestPlan.executionPolicy === "read_only") {
+        autoOpenIssuesRef.current = true;
+        const reviewPrompt = requestPlan.operationPlan.reviewPrompt ?? reviewPromptForComposerRequest(outgoing);
+        const requestMessages = createRequestMessageList(messages, reviewRequestLabel(reviewPrompt));
+        onMessagesChange(requestMessages);
         const result = await runAnalyzeWorkflow({
           playlist: playlistForComposer,
           requestId,
-          userMessage: reviewPromptForComposerRequest(outgoing),
-          messages
+          userMessage: reviewPrompt,
+          messages,
+          reviewMode: requestPlan.reviewMode ?? undefined
         });
         applyWorkflowResult(result);
-      } finally {
-        setBusy(false);
+        return;
       }
-      return;
-    }
-    if (requestKind === "mixed_review_and_curator") {
-      autoOpenIssuesRef.current = true;
-      const requestMessages = createRequestMessageList(messages, outgoing);
-      onMessagesChange(requestMessages);
-      setBusy(true);
-      setProgressStatus("Starting mixed review and curator request.");
-      const controller = new AbortController();
-      setActiveController(controller);
-      try {
-        const result = await runMixedReviewAndCuratorWorkflow(
-          { messages, outgoing, playlist: playlistForComposer, requestId },
-          { analyze: undefined, onProgress: setProgressStatus, signal: controller.signal, sendMessage: undefined }
-        );
-        applyComposerRequestResult({
-          messages: result.messages,
-          nextPlaylist: result.nextPlaylist,
-          historyEntries: [result.reviewHistoryEntry, result.curatorHistoryEntry],
-          review: result.review,
-          reviewEntryId: result.reviewHistoryEntry?.id ?? null,
-          curatorUndoEntry: result.curatorHistoryEntry
-        });
-      } finally {
-        setBusy(false);
-        setProgressStatus(null);
-        setActiveController(null);
+
+      if (requestPlan.routeFamily === "import") {
+        autoOpenIssuesRef.current = true;
+        const requestMessages = createRequestMessageList(messages, outgoing);
+        onMessagesChange(requestMessages);
+        const result = await runImportWorkflow({ playlist, importText: outgoing });
+        applyWorkflowResult(result);
+        return;
       }
-      return;
+
+      if (requestPlan.operationPlan.kind === "mixed_review_and_curator") {
+        autoOpenIssuesRef.current = true;
+        const requestMessages = createRequestMessageList(messages, outgoing);
+        onMessagesChange(requestMessages);
+        setProgressStatus("Starting mixed review and curator request.");
+        const controller = new AbortController();
+        setActiveController(controller);
+        try {
+          const result = await runMixedReviewAndCuratorWorkflow(
+            { messages, outgoing, playlist: playlistForComposer, requestId, reviewMode: requestPlan.reviewMode ?? undefined },
+            { analyze: undefined, onProgress: setProgressStatus, signal: controller.signal, sendMessage: undefined },
+            {
+              reviewPrompt: requestPlan.operationPlan.reviewPrompt ?? reviewPromptForComposerRequest(outgoing),
+              curatorPrompt: requestPlan.operationPlan.curatorPrompt ?? outgoing
+            }
+          );
+          applyComposerRequestResult({
+            messages: createCompletedRequestMessages(requestMessages, result.assistantMessage.content),
+            nextPlaylist: result.nextPlaylist,
+            historyEntries: [result.reviewHistoryEntry, result.curatorHistoryEntry],
+            review: result.review,
+            reviewEntryId: result.reviewHistoryEntry?.id ?? null,
+            curatorUndoEntry: result.curatorHistoryEntry
+          });
+        } finally {
+          setProgressStatus(null);
+          setActiveController(null);
+        }
+        return;
+      }
+
+      await submitCuratorRequest(outgoing, "Starting request.", { requestId });
+    } finally {
+      setBusy(false);
     }
-    await submitCuratorRequest(outgoing, "Starting request.", { requestId });
   }
 
   function interruptRequest() {
@@ -664,7 +693,20 @@ export function ChatPanel({
     });
     setBusy(true);
     try {
-      const result = await runAnalyzeWorkflow({ playlist: playlistForComposer, requestId, userMessage: outgoing, messages });
+      const requestPlan = await planPlaylistRequest(
+        playlistForComposer,
+        outgoing,
+        buildConversationContext(messages),
+        requestId,
+        true
+      );
+      const result = await runAnalyzeWorkflow({
+        playlist: playlistForComposer,
+        requestId,
+        userMessage: requestPlan.operationPlan.reviewPrompt ?? outgoing,
+        messages,
+        reviewMode: requestPlan.reviewMode ?? undefined
+      });
       applyWorkflowResult(result);
       if (result.clearInput) {
         setUserMessage("");

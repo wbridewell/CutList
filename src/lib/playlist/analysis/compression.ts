@@ -64,7 +64,15 @@ function parseTargetTrackCount(userQuestion: string): number | null {
 }
 
 function parseTargetRuntimeMs(userQuestion: string): number | null {
-  const minuteMatch = userQuestion.match(/\b(?:under|to|at|around|about|make this|bring this)\b.{0,20}?(\d+)\s*minute\b/i)
+  if (
+    /\btracks?\b.{0,20}\b(?:under|below|at|around|about|to)\b.{0,10}\d+\s*(?:min|minutes?)\b/i.test(userQuestion) ||
+    /\b(?:under|below|at|around|about|to)\b.{0,10}\d+\s*(?:min|minutes?)\b.{0,20}\btracks?\b/i.test(userQuestion)
+  ) {
+    return null;
+  }
+
+  const minuteMatch = userQuestion.match(/\b(?:make this|bring this)\b.{0,20}?(\d+)\s*minute\b/i)
+    ?? userQuestion.match(/\b(?:under|to|at|around|about)\b.{0,20}?(\d+)\s*minute\b.{0,20}\b(?:playlist|set|runtime|total|overall)\b/i)
     ?? userQuestion.match(/\b(\d+)\s*minute\s+playlist\b/i);
   if (minuteMatch) {
     const minutes = Number.parseInt(minuteMatch[1], 10);

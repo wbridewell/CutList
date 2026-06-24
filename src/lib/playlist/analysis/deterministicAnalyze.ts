@@ -298,6 +298,7 @@ export function deterministicAnalyzePlaylist(
   ].join(" ");
 
   return {
+    reviewMode: "full_critique",
     curatorTake,
     message: reason ?? "OpenAI critique is unavailable, so I ran a deterministic playlist check instead.",
     strengths,

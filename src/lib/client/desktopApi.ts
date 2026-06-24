@@ -16,6 +16,7 @@ import type {
   CuratorResponse,
   ExportRequest,
   ImportChatRequest,
+  UserRequestPlanRequest,
   VerifyRequest
 } from "@/types/playlist";
 
@@ -85,6 +86,10 @@ export function invokeDesktopVerify(payload: VerifyRequest) {
 
 export function invokeDesktopImport(payload: ImportChatRequest) {
   return invokeDesktop<DesktopBackendResultMap["importChat"]>(desktopCommandNames.importChat, payload);
+}
+
+export function invokeDesktopPlanUserRequest(payload: UserRequestPlanRequest) {
+  return invokeDesktop<DesktopBackendResultMap["planUserRequest"]>(desktopCommandNames.planUserRequest, payload);
 }
 
 export function invokeDesktopExport(payload: ExportRequest) {

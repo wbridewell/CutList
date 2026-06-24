@@ -20,6 +20,8 @@ import {
   ImportChatRequestSchema,
   ImportChatResponseSchema,
   PlaylistMessageRequestSchema,
+  ResolvedUserRequestPlanSchema,
+  UserRequestPlanRequestSchema,
   VerifyRequestSchema,
   VerifyResponseSchema
 } from "@/lib/playlist/schemas";
@@ -30,11 +32,13 @@ import {
   writeDesktopWorkspaceState
 } from "@/lib/playlist/io/desktopWorkspaceState";
 import { verifyTracks } from "@/lib/music/verifyTrack";
+import { resolveUserRequestPlan } from "@/lib/ai/services/userRequestPlan";
 import type {
   DesktopAnalyzePayload,
   DesktopExportPayload,
   DesktopImportPayload,
   DesktopPlaylistMessagePayload,
+  DesktopUserRequestPlanPayload,
   DesktopVerifyPayload,
   DesktopWorkspaceStateResponse,
   LLMSetupPayload,
@@ -151,7 +155,25 @@ export async function desktopAnalyzePlaylist(payload: DesktopAnalyzePayload) {
   return AnalyzePlaylistResponseSchema.parse(await handleAnalyzePlaylist(
     input.playlist,
     input.userQuestion,
-    { conversationContext: input.conversationContext, requestId: input.requestId }
+    { conversationContext: input.conversationContext, requestId: input.requestId, reviewMode: input.reviewMode }
+  ));
+}
+
+export async function desktopPlanUserRequest(payload: DesktopUserRequestPlanPayload) {
+  const input = UserRequestPlanRequestSchema.parse(payload);
+  emitReviewRoutingTrace("backend.desktopPlanUserRequest", {
+    requestId: input.requestId ?? null,
+    userMessage: input.userMessage,
+    forceReadOnly: input.forceReadOnly
+  });
+  return ResolvedUserRequestPlanSchema.parse(await resolveUserRequestPlan(
+    input.playlist,
+    input.userMessage,
+    {
+      conversationContext: input.conversationContext,
+      requestId: input.requestId,
+      forceReadOnly: input.forceReadOnly
+    }
   ));
 }
 

@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { restoreCuratorTurnUndoState, shouldClearStaleReviewState } from "@/components/ChatPanel";
+import { restoreCuratorTurnUndoState, reviewHasIssues, shouldClearStaleReviewState } from "@/components/ChatPanel";
 import { classifyComposerRequest } from "@/lib/client/workflows";
 import type { RequestHistoryEntry } from "@/lib/playlist/collaboration";
 import type { AnalyzePlaylistResponse, PlaylistState } from "@/types/playlist";
 
 const review: AnalyzePlaylistResponse = {
+  reviewMode: "full_critique",
   message: "Needs review.",
   strengths: [],
   weakLinks: [],
@@ -57,6 +58,24 @@ describe("ChatPanel stale review cleanup", () => {
     expect(shouldClearStaleReviewState([], null, null)).toBe(false);
   });
 
+  it("treats empty review results as having no issues", () => {
+    expect(reviewHasIssues(review)).toBe(false);
+    expect(reviewHasIssues({
+      ...review,
+      reviewSuggestions: [{
+        id: "review-suggestion-1",
+        type: "remove",
+        applicationMode: "informational",
+        affectedTrackIds: ["track-1"],
+        rationale: "Cut the weak link.",
+        intentPreservation: "Keeps the center intact.",
+        risk: null,
+        confidence: "medium",
+        suggestedPrompt: null
+      }]
+    })).toBe(true);
+  });
+
   it("restores curator turn undo state only when the saved resulting revision still matches the current playlist", () => {
     const undoableHistory: RequestHistoryEntry = {
       id: "request-1",
@@ -102,6 +121,8 @@ describe("ChatPanel stale review cleanup", () => {
     };
     expect(classifyComposerRequest("Review this playlist and name the two tracks that weaken its identity.", populatedPlaylist)).toBe("review_only");
     expect(classifyComposerRequest("Analyze what is working here.", populatedPlaylist)).toBe("review_only");
+    expect(classifyComposerRequest("Identify the single biggest structural problem in this playlist. Focus on identity, pacing, transitions, and version risks. Give a focused diagnosis, not a full rewrite.", populatedPlaylist)).toBe("review_only");
+    expect(classifyComposerRequest("Reorder the playlist to improve flow, but do not modify the playlist.", populatedPlaylist)).toBe("review_only");
     expect(classifyComposerRequest("Review this playlist. Suggest two tracks by Tori Amos.", populatedPlaylist)).toBe("mixed_review_and_curator");
     expect(classifyComposerRequest("Reorder the playlist to improve flow without adding or removing songs.", populatedPlaylist)).toBe("curator_only");
     expect(classifyComposerRequest("Review this playlist.", { ...playlist, tracks: [] })).toBe("curator_only");

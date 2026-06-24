@@ -204,6 +204,76 @@ describe("curator LLM boundaries", () => {
     expect(result.playlistUpdate?.tracks.map((track) => track.title)).toEqual(["Cold Open", "Resolve", "Warm Lift"]);
   });
 
+  it("falls back to deterministic weakest-track replacement when removal selection returns no valid ids", async () => {
+    vi.mocked(getLLMProvider).mockReturnValue("ollama");
+    const anchor = {
+      ...acceptedTrack("track-1", "March Forward", "Nine Inch Nails"),
+      genreTags: ["industrial"],
+      energy: 9
+    };
+    const outlier = {
+      ...acceptedTrack("track-2", "Soft Focus", "The Cure"),
+      genreTags: ["synth-pop"],
+      energy: 3
+    };
+    const closer = {
+      ...acceptedTrack("track-3", "Machine Sleep", "Skinny Puppy"),
+      genreTags: ["industrial"],
+      energy: 8
+    };
+    vi.mocked(getJsonFromLLM)
+      .mockResolvedValueOnce({
+        operationIntent: {
+          type: "replace",
+          requestedTrackCount: null,
+          targetTotalTrackCount: null,
+          replaceCount: 1,
+          confidence: "high"
+        },
+        verifiedRules: {},
+        curatorGuidance: {},
+        scopeIntent: {
+          persistentVerifiedRuleFields: [],
+          persistentGuidanceFields: [],
+          requestScopedVerifiedRuleFields: [],
+          requestScopedGuidanceFields: []
+        },
+        notes: ["Replace the weakest existing fit."]
+      })
+      .mockResolvedValueOnce({
+        message: "I could not confidently map the weakest track to a valid existing ID.",
+        removeTrackIds: ["not-in-playlist"],
+        rationaleByTrackId: {
+          "not-in-playlist": "Invalid id."
+        }
+      })
+      .mockResolvedValueOnce({
+        message: "Here is a nastier fit.",
+        playlistMeta: null,
+        candidates: [
+          { title: "Metal Crash", artist: "Front Line Assembly", album: null, reason: "Sharper industrial precision.", vibeTags: ["industrial"], expectedFitNotes: "", energy: 8 }
+        ]
+      });
+    vi.mocked(verifyTrack).mockResolvedValue({
+      status: "verified",
+      track: {
+        ...acceptedTrack("id:Metal Crash", "Metal Crash", "Front Line Assembly"),
+        genreTags: ["industrial"],
+        energy: 8
+      }
+    });
+
+    const result = await handlePlaylistMessage(
+      { ...playlist, tracks: [anchor, outlier, closer] },
+      "replace the weakest track with something nastier"
+    );
+
+    expect(result.playlistUpdate?.action).toBe("set");
+    expect(result.playlistUpdate?.tracks.map((track) => track.title)).toEqual(["March Forward", "Machine Sleep", "Metal Crash"]);
+    expect(result.playlistUpdate?.tracks.map((track) => track.id)).not.toContain("track-2");
+    expect(result.message).toContain("I verified and accepted 1 track toward the requested 1.");
+  });
+
   it("applies pure covers-only rule updates without generating tracks", async () => {
     vi.mocked(getLLMProvider).mockReturnValue("ollama");
     vi.mocked(getJsonFromLLM).mockResolvedValueOnce({

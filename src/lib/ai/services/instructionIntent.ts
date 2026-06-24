@@ -212,13 +212,13 @@ export function normalizeInstructionIntentLayers(intent: InstructionIntent | nul
     return {
       operationType: "other",
       operationConfidence: "low",
-      requestedAddCount: null,
-      targetTotalTrackCount: null,
-      replacementCount: null,
+    requestedAddCount: null,
+    targetTotalTrackCount: null,
+    replacementCount: null,
       ...buildConstraintDomainModel({}),
       notes: [],
-      raw: null
-    };
+    raw: null
+  };
   }
 
   const constraintDomain = buildConstraintDomainModel({
@@ -314,6 +314,7 @@ export function withNormalizedInstructionScope(
     operationIntent: intent.operationIntent,
     verifiedRules: constraintDomain.verifiedRules,
     curatorGuidance: constraintDomain.curatorGuidance,
+    routingIntent: intent.routingIntent,
     scopeIntent: {
       persistentVerifiedRuleFields: scopeFieldsForConstraints(constraintDomain.persistentVerifiedRules, verifiedRuleConstraintFields),
       persistentGuidanceFields: scopeFieldsForConstraints(constraintDomain.persistentGuidance, curatorGuidanceConstraintFields),

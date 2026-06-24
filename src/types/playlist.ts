@@ -3,6 +3,7 @@ import {
   AnalyzePlaylistRequestSchema,
   AnalyzePlaylistResponseSchema,
   AttemptedMatchSchema,
+  BoundNamedTrackSchema,
   CandidateTrackSchema,
   ConstraintFindingSchema,
   ConstraintCoverageFieldReportSchema,
@@ -29,8 +30,19 @@ import {
   PlaylistUpdateActionSchema,
   PlaylistUpdateSchema,
   PlaylistTrackRoleSchema,
+  NormalizedInstructionIntentSchema,
+  OperatorBoundEntitiesSchema,
+  OperatorDeclaredEntitiesSchema,
+  OperatorExecutionReceiptSchema,
+  OperatorKindSchema,
+  OperatorParameterHintsSchema,
+  OperatorPlanNodeSchema,
+  OperatorPlanTemplateSchema,
   RejectedCandidateSchema,
+  ResolvedOperatorPlanSchema,
+  ResolvedUserRequestPlanSchema,
   ReviewConfidenceSchema,
+  ReviewModeSchema,
   ReviewBasisSchema,
   ReviewSuggestionApplicationModeSchema,
   ReviewSuggestionSchema,
@@ -42,6 +54,14 @@ import {
   TrackRoleAssessmentSchema,
   TransitionAssessmentSchema,
   TransitionIssueTypeSchema,
+  UserRequestExecutionPolicySchema,
+  UserRequestOperationPlanKindSchema,
+  UserRequestOperationPlanSchema,
+  UserRequestPlanRequestSchema,
+  UserRequestRouteFamilySchema,
+  UserRequestRoutingConfidenceSchema,
+  UserRequestRoutingNoteSchema,
+  UserRequestDeterministicSignalsSchema,
   VerificationSourceSchema,
   VerifyRequestSchema,
   VerifyResponseSchema
@@ -80,7 +100,9 @@ export type ExportResponse = z.infer<typeof ExportResponseSchema>;
 export type ImportChatRequest = z.infer<typeof ImportChatRequestSchema>;
 export type ImportChatResponse = z.infer<typeof ImportChatResponseSchema>;
 export type InstructionIntent = z.infer<typeof InstructionIntentSchema>;
+export type NormalizedInstructionIntentSnapshot = z.infer<typeof NormalizedInstructionIntentSchema>;
 export type ReviewConfidence = z.infer<typeof ReviewConfidenceSchema>;
+export type ReviewMode = z.infer<typeof ReviewModeSchema>;
 export type ReviewBasis = z.infer<typeof ReviewBasisSchema>;
 export type PlaylistTrackRole = z.infer<typeof PlaylistTrackRoleSchema>;
 export type TransitionIssueType = z.infer<typeof TransitionIssueTypeSchema>;
@@ -92,3 +114,21 @@ export type TransitionAssessment = z.infer<typeof TransitionAssessmentSchema>;
 export type ReviewSuggestion = z.infer<typeof ReviewSuggestionSchema>;
 export type AnalyzePlaylistRequest = z.infer<typeof AnalyzePlaylistRequestSchema>;
 export type AnalyzePlaylistResponse = z.infer<typeof AnalyzePlaylistResponseSchema>;
+export type UserRequestRouteFamily = z.infer<typeof UserRequestRouteFamilySchema>;
+export type UserRequestExecutionPolicy = z.infer<typeof UserRequestExecutionPolicySchema>;
+export type UserRequestRoutingConfidence = z.infer<typeof UserRequestRoutingConfidenceSchema>;
+export type UserRequestRoutingNote = z.infer<typeof UserRequestRoutingNoteSchema>;
+export type UserRequestOperationPlanKind = z.infer<typeof UserRequestOperationPlanKindSchema>;
+export type UserRequestOperationPlan = z.infer<typeof UserRequestOperationPlanSchema>;
+export type UserRequestDeterministicSignals = z.infer<typeof UserRequestDeterministicSignalsSchema>;
+export type UserRequestPlanRequest = z.infer<typeof UserRequestPlanRequestSchema>;
+export type OperatorKind = z.infer<typeof OperatorKindSchema>;
+export type OperatorPlanTemplate = z.infer<typeof OperatorPlanTemplateSchema>;
+export type OperatorPlanNode = z.infer<typeof OperatorPlanNodeSchema>;
+export type BoundNamedTrack = z.infer<typeof BoundNamedTrackSchema>;
+export type OperatorDeclaredEntities = z.infer<typeof OperatorDeclaredEntitiesSchema>;
+export type OperatorParameterHints = z.infer<typeof OperatorParameterHintsSchema>;
+export type OperatorBoundEntities = z.infer<typeof OperatorBoundEntitiesSchema>;
+export type ResolvedOperatorPlan = z.infer<typeof ResolvedOperatorPlanSchema>;
+export type OperatorExecutionReceipt = z.infer<typeof OperatorExecutionReceiptSchema>;
+export type ResolvedUserRequestPlan = z.infer<typeof ResolvedUserRequestPlanSchema>;

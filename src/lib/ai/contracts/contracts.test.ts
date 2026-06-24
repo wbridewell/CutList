@@ -17,7 +17,9 @@ describe("LLM contracts", () => {
       "playlistRemoval",
       "importChat",
       "matchReview",
+      "operatorPlan",
       "playlistCritique",
+      "playlistTransitionRepair",
       "workflowSummary"
     ]);
   });
@@ -202,5 +204,27 @@ describe("LLM contracts", () => {
 
     expect(parsed.reviewSuggestions[0]?.type).toBe("reorder");
     expect(parsed.reviewSuggestions[0]?.applicationMode).toBe("reorder_existing");
+  });
+
+  it("parses focused transition repair options through the registered contract", () => {
+    const parsed = getLlmContract("playlistTransitionRepair").parse({
+      message: "These three tracks step the energy down cleanly.",
+      transitionSummary: "The handoff needs a cold, rhythmic decompression chamber.",
+      bridgeOptions: [{
+        candidate: {
+          title: "Closer",
+          artist: "Nine Inch Nails",
+          album: null,
+          reason: "Cold mid-tempo pressure.",
+          vibeTags: [],
+          expectedFitNotes: "",
+          energy: 7
+        },
+        role: "Acts as a heavy hydraulic brake that keeps the mechanical pulse alive."
+      }]
+    });
+
+    expect(parsed.bridgeOptions[0]?.candidate.title).toBe("Closer");
+    expect(parsed.bridgeOptions[0]?.role).toContain("mechanical pulse");
   });
 });

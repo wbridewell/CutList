@@ -3,6 +3,7 @@ import {
   desktopExportPlaylist,
   desktopImportChat,
   desktopPlaylistMessage,
+  desktopPlanUserRequest,
   desktopVerifyTracks,
   getDesktopLlmSetup,
   getDesktopWorkspaceState,
@@ -87,6 +88,9 @@ async function main(): Promise<void> {
         return;
       case "analyzePlaylist":
         writeLine({ type: "result", data: await timed(() => desktopAnalyzePlaylist(envelope.payload as never)) });
+        return;
+      case "planUserRequest":
+        writeLine({ type: "result", data: await timed(() => desktopPlanUserRequest(envelope.payload as never)) });
         return;
       case "exportPlaylist":
         writeLine({ type: "result", data: await timed(() => desktopExportPlaylist(envelope.payload as never)) });

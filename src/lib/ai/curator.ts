@@ -10,8 +10,10 @@ import { handleAnalyzePlaylist } from "@/lib/ai/services/analyzeService";
 import { handleImportChat } from "@/lib/ai/services/importChatService";
 import type { CuratorRunOptions } from "@/lib/ai/curatorTypes";
 import { executeResolvedCuratorPlan } from "@/lib/ai/services/curatorWorkflow";
+import { resolveOperatorPlan } from "@/lib/ai/services/operatorPlanner";
 import { resolveCuratorRequestPlan } from "@/lib/ai/services/requestResolution";
 import { handlePlaylistShapeRequest } from "@/lib/ai/services/playlistShapeService";
+import { evaluatePlaylistConstraints } from "@/lib/playlist/constraints";
 import type { CuratorResponse, PlaylistState } from "@/types/playlist";
 
 export type { CuratorProgressEvent } from "@/lib/ai/curatorTypes";
@@ -47,6 +49,61 @@ export async function handlePlaylistMessage(
     userMessage,
     trackCount: playlist.tracks.length
   });
+  const operatorPlan = await resolveOperatorPlan(playlist, userMessage, options);
+  emitReviewRoutingTrace("backend.handlePlaylistMessage.operatorPlan", {
+    requestId: options.requestId ?? null,
+    routeFamily: operatorPlan.routeFamily,
+    executionPolicy: operatorPlan.executionPolicy,
+    planTemplate: operatorPlan.planTemplate,
+    operators: operatorPlan.operators.map((operator) => operator.kind)
+  });
+
+  if (operatorPlan.routeFamily === "review") {
+    const review = await handleAnalyzePlaylist(playlist, userMessage, {
+      conversationContext: options.conversationContext,
+      requestId: options.requestId,
+      reviewMode: operatorPlan.reviewMode ?? undefined
+    });
+    return {
+      message: review.curatorTake ?? review.message,
+      playlistUpdate: null,
+      playlistMeta: null,
+      updatedConstraints: playlist.constraints,
+      constraintReport: review.constraintReport,
+      rejectedCandidates: []
+    };
+  }
+
+  if (operatorPlan.routeFamily === "import") {
+    const imported = await handleImportChat(userMessage);
+    return {
+      message: imported.verifiedTracks.length > 0
+        ? `Imported ${imported.verifiedTracks.length} verified track${imported.verifiedTracks.length === 1 ? "" : "s"} from the request.`
+        : "I treated this as an import request, but I could not verify any tracks from the text.",
+      playlistUpdate: imported.verifiedTracks.length > 0
+        ? { action: "add", tracks: imported.verifiedTracks, orderRationale: null }
+        : null,
+      playlistMeta: null,
+      updatedConstraints: playlist.constraints,
+      constraintReport: evaluatePlaylistConstraints(
+        [...playlist.tracks, ...imported.verifiedTracks],
+        playlist.constraints
+      ),
+      rejectedCandidates: imported.rejectedCandidates
+    };
+  }
+
+  if (operatorPlan.routeFamily === "conversational") {
+    return {
+      message: "Ready when you are. Send me a vibe, seed tracks, or a playlist constraint and I will verify additions before they enter the workspace.",
+      playlistUpdate: null,
+      playlistMeta: null,
+      updatedConstraints: playlist.constraints,
+      constraintReport: evaluatePlaylistConstraints(playlist.tracks, playlist.constraints),
+      rejectedCandidates: []
+    };
+  }
+
   if (playlist.tracks.length >= 2 && isStrictReorderOnlyRequest(userMessage)) {
     options.onProgress?.({ stage: "parsing", message: "Understanding your request and active rules." });
     emitReviewRoutingTrace("backend.handlePlaylistMessage.strictReorder", {

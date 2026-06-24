@@ -82,6 +82,7 @@ const rejectedEntry: RequestHistoryEntry = {
 };
 
 const review: AnalyzePlaylistResponse = {
+  reviewMode: "full_critique",
   message: "There is one cleanup suggestion and one handled follow-up.",
   strengths: [],
   weakLinks: [],
@@ -404,7 +405,6 @@ describe("UI redesign behavior", () => {
 
     expect(items.map((item) => item.kind)).toEqual([
       "rejected_candidate",
-      "review_action",
       "verified_rule_issue",
       "evidence_note"
     ]);
@@ -471,9 +471,9 @@ describe("UI redesign behavior", () => {
     expect(html).toContain("Triage inbox");
     expect(html).toContain("Next up: repair 1 rejected candidate.");
     expect(html).toContain("Rejected candidate");
-    expect(html).toContain("Curator review");
-    expect(html).toContain("Replace");
     expect(html).toContain("Evidence note");
+    expect(html).not.toContain("Curator review");
+    expect(html).not.toContain("Apply review action");
     expect(html).not.toContain("Handled review actions");
     expect(html).not.toContain("This cleanup is already handled.");
   });
@@ -881,6 +881,38 @@ describe("UI redesign behavior", () => {
     expect(html).toContain("The second track opens stronger.");
     expect(html).toContain("Show 2 position changes");
     expect(html).not.toContain("0 accepted");
+  });
+
+  it("renders informational review suggestions as notes instead of open actions", () => {
+    const history: RequestHistoryEntry[] = [{
+      id: "review-info",
+      userMessage: "Review playlist",
+      assistantMessage: "Two tracks are soft spots.",
+      acceptedCount: 0,
+      rejectedCandidates: [],
+      createdAt: "2026-06-23T12:00:00.000Z",
+      kind: "review",
+      reviewSuggestions: [{
+        id: "review-note-1",
+        type: "remove",
+        applicationMode: "informational",
+        affectedTrackIds: ["track-2"],
+        rationale: "These tracks are the velvet curtains of the set.",
+        intentPreservation: "Keeps the diagnosis focused on identity drift.",
+        risk: null,
+        confidence: "high",
+        suggestedPrompt: "Remove the two soft spots."
+      }],
+      issueStatuses: []
+    }];
+
+    const html = renderToStaticMarkup(React.createElement(ConversationTimeline, {
+      history
+    }));
+
+    expect(html).toContain("Review notes");
+    expect(html).toContain("Informational");
+    expect(html).not.toContain("Still open");
   });
 
   it("exposes rejected candidates through an accessible disclosure", () => {

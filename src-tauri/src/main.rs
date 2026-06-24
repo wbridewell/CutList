@@ -577,6 +577,7 @@ macro_rules! desktop_value_command {
 desktop_value_command!(desktop_verify_tracks, "verifyTracks");
 desktop_value_command!(desktop_import_chat, "importChat");
 desktop_value_command!(desktop_analyze_playlist, "analyzePlaylist");
+desktop_value_command!(desktop_plan_user_request, "planUserRequest");
 desktop_value_command!(desktop_get_llm_setup, "getLlmSetup");
 desktop_value_command!(desktop_save_llm_setup, "saveLlmSetup");
 desktop_value_command!(desktop_test_llm_setup, "testLlmSetup");
@@ -613,6 +614,7 @@ fn main() {
             desktop_get_llm_setup,
             desktop_get_workspace_state,
             desktop_import_chat,
+            desktop_plan_user_request,
             desktop_playlist_message,
             desktop_reveal_in_file_manager,
             desktop_save_llm_setup,

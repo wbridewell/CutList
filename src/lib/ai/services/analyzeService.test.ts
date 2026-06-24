@@ -180,7 +180,169 @@ describe("analyze service compression routing", () => {
   it("filters non-removal suggestions from weak-link identification reviews", async () => {
     const result = await handleAnalyzePlaylist(playlist, "Review this playlist and name the two tracks that weaken its identity.");
 
+    expect(result.reviewMode).toBe("weak_links_only");
     expect(result.reviewSuggestions.every((suggestion) => suggestion.type === "remove")).toBe(true);
+  });
+
+  it("keeps focused transition repair reviews scoped to bridge suggestions", async () => {
+    vi.mocked(getJsonFromLLM).mockResolvedValue({
+      message: "The jump is too violent.",
+      transitionSummary: "The handoff needs a dark decompression chamber.",
+      bridgeOptions: [{
+        candidate: {
+          title: "Closer",
+          artist: "Nine Inch Nails",
+          album: null,
+          reason: "Cold mid-tempo pressure.",
+          vibeTags: [],
+          expectedFitNotes: "",
+          energy: 7
+        },
+        role: "Acts as a heavy hydraulic brake that keeps the mechanical pulse alive."
+      }, {
+        candidate: {
+          title: "Angel",
+          artist: "Massive Attack",
+          album: null,
+          reason: "Dark breakbeat descent.",
+          vibeTags: [],
+          expectedFitNotes: "",
+          energy: 6
+        },
+        role: "Keeps the pressure in the drums while darkening the temperature."
+      }, {
+        candidate: {
+          title: "Rabbit in Your Headlights",
+          artist: "UNKLE",
+          album: null,
+          reason: "Bleak electronic glide.",
+          vibeTags: [],
+          expectedFitNotes: "",
+          energy: 5
+        },
+        role: "Strips out the rave velocity and leaves a cold nocturnal tunnel into Roads."
+      }]
+    });
+
+    const result = await handleAnalyzePlaylist(
+      playlist,
+      "Repair only the transition from Firestarter into Roads. Do not remove or reorder existing tracks. Recommend 3 possible bridge tracks.",
+      { reviewMode: "focused_transition_repair" }
+    );
+
+    expect(result.reviewMode).toBe("focused_transition_repair");
+    expect(result.reviewSuggestions.every((suggestion) => suggestion.type === "add_bridge")).toBe(true);
+    expect(result.reviewSuggestions).toHaveLength(3);
+    expect(result.reviewSuggestions.every((suggestion) => suggestion.candidate)).toBe(true);
+    expect(result.weakLinks).toEqual([]);
+    expect(result.trackRoles).toEqual([]);
+  });
+
+  it("upgrades an accidentally broad incoming review mode when the prompt is clearly focused", async () => {
+    vi.mocked(getJsonFromLLM).mockResolvedValue({
+      message: "The jump is too violent.",
+      transitionSummary: "The handoff needs a dark decompression chamber.",
+      bridgeOptions: [{
+        candidate: {
+          title: "Closer",
+          artist: "Nine Inch Nails",
+          album: null,
+          reason: "Cold mid-tempo pressure.",
+          vibeTags: [],
+          expectedFitNotes: "",
+          energy: 7
+        },
+        role: "Acts as a heavy hydraulic brake that keeps the mechanical pulse alive."
+      }, {
+        candidate: {
+          title: "Angel",
+          artist: "Massive Attack",
+          album: null,
+          reason: "Dark breakbeat descent.",
+          vibeTags: [],
+          expectedFitNotes: "",
+          energy: 6
+        },
+        role: "Keeps the pressure in the drums while darkening the temperature."
+      }, {
+        candidate: {
+          title: "Rabbit in Your Headlights",
+          artist: "UNKLE",
+          album: null,
+          reason: "Bleak electronic glide.",
+          vibeTags: [],
+          expectedFitNotes: "",
+          energy: 5
+        },
+        role: "Strips out the rave velocity and leaves a cold nocturnal tunnel into Roads."
+      }]
+    });
+
+    const result = await handleAnalyzePlaylist(
+      playlist,
+      "Repair only the transition from Firestarter into Roads. Do not remove or reorder existing tracks. Recommend 3 possible bridge tracks.",
+      { reviewMode: "full_critique" }
+    );
+
+    expect(result.reviewMode).toBe("focused_transition_repair");
+    expect(result.reviewSuggestions.every((suggestion) => suggestion.type === "add_bridge")).toBe(true);
+    expect(result.reviewSuggestions).toHaveLength(3);
+  });
+
+  it("stays in focused transition mode when the dedicated bridge contract falls back", async () => {
+    vi.mocked(getJsonFromLLM).mockRejectedValueOnce(new JsonExtractionError("bad output", "Curator judgment:\nSuggested follow-ups:\n- compress_section"));
+
+    const result = await handleAnalyzePlaylist(
+      playlist,
+      "Repair only the transition from Firestarter into Roads. Do not remove or reorder existing tracks. Recommend 3 possible bridge tracks.",
+      { reviewMode: "focused_transition_repair" }
+    );
+
+    expect(result.reviewMode).toBe("focused_transition_repair");
+    expect(result.reviewSuggestions.every((suggestion) => suggestion.type === "add_bridge")).toBe(true);
+    expect(result.reviewSuggestions.some((suggestion) => suggestion.type === "compress_section")).toBe(false);
+    expect(result.strengths).toEqual([]);
+    expect(result.trackRoles).toEqual([]);
+  });
+
+  it("suppresses follow-up suggestions for diagnose-only reviews", async () => {
+    vi.mocked(getJsonFromLLM).mockResolvedValue({
+      curatorTake: "The identity is split between two incompatible worlds.",
+      message: "The biggest problem is identity fracture.",
+      strengths: [],
+      weakLinks: [],
+      sequencingNotes: ["The industrial core keeps colliding with softer nostalgia cues."],
+      suggestedEdits: [],
+      intentSummary: {
+        playlistIdentity: "Fractured industrial drift.",
+        preservedQualities: [],
+        likelyUserIntent: "Name the problem clearly.",
+        riskNotes: [],
+        confidence: "high"
+      },
+      trackRoles: [],
+      transitionReview: [],
+      reviewSuggestions: [{
+        id: "bridge-1",
+        type: "add_bridge",
+        applicationMode: "verify_candidate",
+        affectedTrackIds: ["open", "middle"],
+        rationale: "Too action-oriented for diagnose-only.",
+        intentPreservation: "N/A",
+        risk: null,
+        confidence: "medium",
+        suggestedPrompt: "Find a bridge."
+      }]
+    });
+
+    const result = await handleAnalyzePlaylist(
+      playlist,
+      "Identify the single biggest structural problem in this playlist. Give a focused diagnosis, not a full rewrite.",
+      { reviewMode: "diagnose_only" }
+    );
+
+    expect(result.reviewMode).toBe("diagnose_only");
+    expect(result.reviewSuggestions).toEqual([]);
   });
 
   it("recovers critique output after one repair pass instead of falling back immediately", async () => {

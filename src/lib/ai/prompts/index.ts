@@ -15,6 +15,7 @@ import type {
   ConversationContext,
   DiscoveryRadius,
   PlaylistState,
+  ReviewMode,
   SuppressedCandidateFingerprint
 } from "@/types/playlist";
 
@@ -178,12 +179,22 @@ export function instructionIntentPrompt(
     "Parse this playlist chat instruction into structured intent for The CutList.",
     returnJsonShapeGuidance(contract),
     ...contract.safetyGuidance,
-    "Return every top-level key exactly once. Do not omit operationIntent, verifiedRules, curatorGuidance, scopeIntent, or notes.",
+    "Return every top-level key exactly once. Do not omit operationIntent, verifiedRules, curatorGuidance, routingIntent, scopeIntent, or notes.",
     "When a branch has no values, return an empty object for it. When a scope list has no fields, return [].",
     "Use operationIntent.type = \"reorder\" when the user asks to sequence, order, reorder, retitle, name, describe, or create an arc for the existing playlist without asking for new songs.",
     "Also use operationIntent.type = \"reorder\" for existing-playlist shaping requests such as grouping similar tracks, clustering genres, improving flow, smoothing transitions, changing pacing, shaping an energy curve, or placing high-energy/release/redemption moments in a narrative act.",
     "Use operationIntent.type = \"replace\" when the user wants existing tracks swapped out and replaced with new verified additions.",
     "When the user combines shaping language with additions, removals, or replacements, prefer add, remove, or replace as operationIntent.type and leave sequencing needs in notes instead of collapsing the whole request into reorder.",
+    "Use routingIntent.routeFamily = \"review\" for diagnosis, critique, structural-problem, or non-mutating editorial requests about an existing playlist.",
+    "Use routingIntent.routeFamily = \"curator\" for mutating add/remove/replace/reorder requests, \"import\" for pasted track lists, and \"conversational\" for non-execution chat that should not change the playlist.",
+    "Set routingIntent.allowMutation = false when the user explicitly says not to modify, change, edit, or mutate the playlist, even if they also mention sequencing or other edit language.",
+    "Set routingIntent.diagnosisOnly = true for focused review requests that should diagnose a problem without carrying out edits.",
+    "Set routingIntent.hypotheticalOnly = true when edit language is being discussed as advice or diagnosis rather than as an instruction to execute.",
+    "When routingIntent.routeFamily = \"review\", set routingIntent.reviewMode to the narrowest fitting review output: full_critique, diagnose_only, weak_links_only, focused_transition_repair, bridge_options_only, compression_review, ending_repair, or sequencing_only.",
+    "Use routingIntent.reviewMode = focused_transition_repair when the user names a specific transition or handoff to repair, especially when they ask for bridge tracks without removing or reordering.",
+    "Use routingIntent.reviewMode = weak_links_only when the user asks which tracks weaken, dilute, fracture, or undermine the playlist.",
+    "Use routingIntent.reviewMode = diagnose_only when the user asks for the single biggest problem or a focused diagnosis rather than a rewrite.",
+    "Use routingIntent.reviewMode = compression_review only for explicit compression or cutting requests framed as review rather than execution.",
     "Separate verified backend-checkable rules into verifiedRules and softer preference language into curatorGuidance.",
     "Use scopeIntent to mark which verifiedRules or curatorGuidance fields should persist after this request versus apply only for this request.",
     "requestedTrackCount means how many tracks to add now. targetTotalTrackCount means the desired playlist length after the request. replaceCount means how many existing tracks should be swapped out.",
@@ -228,6 +239,40 @@ export function curatorStepPlanPrompt(
     `Current playlist JSON: ${JSON.stringify(playlist)}`,
     `User message: ${userMessage}`
   ]);
+}
+
+export function operatorPlanPrompt(
+  playlist: PlaylistState,
+  userMessage: string,
+  options: {
+    conversationContext?: ConversationContext;
+    forceReadOnly?: boolean;
+    hasPastedTracks?: boolean;
+    trackCount?: number;
+  } = {}
+): string {
+  const contract = getLlmContract("operatorPlan");
+  return buildPromptEnvelope([
+    "Turn this playlist request into a typed operator plan for The CutList.",
+    ...curatorVoiceGuidance(),
+    returnJsonShapeGuidance(contract),
+    ...contract.safetyGuidance,
+    ...(contract.outputGuidance ?? []),
+    "This is a planning task, not an execution task.",
+    "Compose the request from a small operator library instead of describing a freeform workflow.",
+    "Use review operators for read-only diagnosis and curator operators for playlist mutations.",
+    "When the user names a specific transition or handoff, prefer a focused transition review plan and include the raw from/to text in both declaredEntities.transition and resolve_named_tracks.",
+    "Use per-track duration preferences such as tracks under 5 minutes as parameterHints.maxTrackDurationMs, not as playlist compression.",
+    "If the request says not to modify or the caller forces read_only, keep executionPolicy = read_only even if the prompt mentions edit verbs.",
+    options.forceReadOnly ? "Execution policy is forced to read_only for this request." : null,
+    options.hasPastedTracks ? "Pasted tracks were detected; prefer an import_request plan unless the user is clearly doing something else." : null,
+    options.trackCount === 0 ? "The playlist is empty; do not produce review-only plans that require existing transitions or weak-link analysis." : null,
+    ...conversationContextGuidance(options.conversationContext),
+    ...strongContinuityGuidance(),
+    "",
+    `Current playlist JSON: ${JSON.stringify(playlist)}`,
+    `User message: ${userMessage}`
+  ].filter(Boolean));
 }
 
 export function candidatePrompt(
@@ -352,9 +397,10 @@ export function matchReviewPrompt(input: {
 export function critiquePrompt(
   playlist: PlaylistState,
   userQuestion?: string,
-  options: { compressionRequest?: CompressionRequest | null; conversationContext?: ConversationContext } = {}
+  options: { compressionRequest?: CompressionRequest | null; conversationContext?: ConversationContext; reviewMode?: ReviewMode } = {}
 ): string {
   const contract = getLlmContract("playlistCritique");
+  const reviewMode = options.reviewMode ?? "full_critique";
   const compressionGuidance = options.compressionRequest
     ? [
       "The user is explicitly asking for playlist compression. Treat this as editing the current playlist, not as replacement or fresh generation.",
@@ -365,6 +411,58 @@ export function critiquePrompt(
       options.compressionRequest.targetTotalDurationMs != null ? `Aim toward about ${Math.round(options.compressionRequest.targetTotalDurationMs / 60_000)} total minutes.` : null
     ].filter(Boolean)
     : [];
+  const reviewModeGuidance = reviewMode === "focused_transition_repair"
+    ? [
+      "Focused review mode: focused_transition_repair.",
+      "Discuss only the named transition or handoff. Do not widen the scope to the rest of the playlist.",
+      "Return transition-specific diagnosis and bridge-style repairs only.",
+      "reviewSuggestions may include only add_bridge suggestions in this mode.",
+      "Do not emit compress_section, remove, replace, reorder, or improve_ending suggestions in this mode.",
+      "When the user asks for a specific number of bridge tracks, return exactly that many bridge options."
+    ]
+    : reviewMode === "bridge_options_only"
+      ? [
+        "Focused review mode: bridge_options_only.",
+        "Center the weakest or named transition and propose bridge-track options only.",
+        "reviewSuggestions may include only add_bridge suggestions in this mode.",
+        "Do not emit compress_section, remove, replace, reorder, or improve_ending suggestions in this mode."
+      ]
+      : reviewMode === "diagnose_only"
+        ? [
+          "Focused review mode: diagnose_only.",
+          "Name the biggest problem clearly and support it with evidence, but do not widen into a rewrite plan.",
+          "reviewSuggestions must be [] unless the user explicitly asks for follow-up options.",
+          "Do not emit bridge, compression, reorder, remove, replace, or add suggestions by default in this mode."
+        ]
+        : reviewMode === "weak_links_only"
+          ? [
+            "Focused review mode: weak_links_only.",
+            "Identify only the weakest tracks or fit failures and explain why they weaken the identity.",
+            "reviewSuggestions may include only remove suggestions in this mode.",
+            "Do not emit bridge, compression, reorder, ending, or broad sequencing suggestions in this mode."
+          ]
+          : reviewMode === "compression_review"
+            ? [
+              "Focused review mode: compression_review.",
+              "Evaluate overbuilt sections, pacing drag, and cuts/compression only.",
+              "reviewSuggestions may include compress_section and remove suggestions in this mode."
+            ]
+            : reviewMode === "ending_repair"
+              ? [
+                "Focused review mode: ending_repair.",
+                "Discuss only the ending, closer, or landing of the playlist.",
+                "reviewSuggestions may include only improve_ending or add_bridge suggestions in this mode."
+              ]
+              : reviewMode === "sequencing_only"
+                ? [
+                  "Focused review mode: sequencing_only.",
+                  "Discuss order, flow, pacing, and transitions only.",
+                  "Do not suggest new tracks or removals in this mode unless the user explicitly asks for them."
+                ]
+                : [
+                  "Review mode: full_critique.",
+                  "You may discuss the whole playlist and use the full critique scaffold."
+                ];
   return buildPromptEnvelope([
     "Critique this verified playlist without mutating it.",
     ...curatorVoiceGuidance(),
@@ -384,9 +482,11 @@ export function critiquePrompt(
     "Return curatorTake as the Curator's compact human read of the playlist before the more structured sections.",
     "curatorTake should sound like a living musical intelligence speaking directly to the user, not a report heading.",
     "Keep every structured section inside the returned object. reviewSuggestions must be [] when you have no safe suggestion to make.",
-    "Every reviewSuggestion must be safe to inspect before application. For remove_existing include existing affectedTrackIds. For reorder_existing include orderedTrackIds with every current track id exactly once. For verify_candidate include candidate or suggestedPrompt so the user can send it through verification. Use informational for advice that should not be applied directly.",
-    "When a transition clearly needs connective tissue, prefer an add_bridge suggestion with verify_candidate over vague informational prose.",
-    "If you identify an abrupt energy jump or weak bridge between two tracks and no safe reorder fully solves it, emit add_bridge.",
+    "Review mode is non-mutating. Every reviewSuggestion must use applicationMode = informational, even when you are naming a specific cut, reorder, bridge, compression, or replacement idea.",
+    "Use reviewSuggestions to capture focused follow-up ideas the user could copy into a later curator prompt, not direct actions the app should apply now.",
+    "When a transition clearly needs connective tissue, prefer an add_bridge suggestion as an informational note with a suggestedPrompt over vague filler prose.",
+    "If you identify an abrupt energy jump or weak bridge between two tracks and no safe reorder fully solves it, emit add_bridge as informational.",
+    ...reviewModeGuidance,
     ...compressionGuidance,
     ...conversationContextGuidance(options.conversationContext),
     ...strongContinuityGuidance(),
@@ -395,6 +495,38 @@ export function critiquePrompt(
     `Playlist JSON: ${JSON.stringify(playlist)}`,
     `User question: ${userQuestion ?? "What is working, what is weak, and what should happen next?"}`
   ]);
+}
+
+export function transitionRepairPrompt(
+  playlist: PlaylistState,
+  userQuestion: string,
+  options: {
+    conversationContext?: ConversationContext;
+    requestedCount?: number | null;
+    namedTransition?: { fromLabel: string; toLabel: string } | null;
+  } = {}
+): string {
+  const contract = getLlmContract("playlistTransitionRepair");
+  return buildPromptEnvelope([
+    "Repair this playlist transition without mutating the playlist.",
+    ...curatorVoiceGuidance(),
+    returnJsonShapeGuidance(contract),
+    ...(contract.outputGuidance ?? []),
+    ...contract.safetyGuidance,
+    "Return one JSON object only.",
+    "Focus only on the named transition or handoff. Do not widen to full-playlist critique.",
+    "Recommend bridge tracks only. Do not suggest removals, reorders, compression, or broad playlist surgery.",
+    "Do not return critique scaffolds such as Curator judgment, Review note, What works, Sequencing, Transitions, Suggested follow-ups, or compress_section.",
+    "If you mention any track removal, reorder, section compression, or playlist-wide fix, the response is invalid.",
+    "Each bridgeOptions entry must contain a real CandidateTrack plus a role string that explains how it steps the listener from the source track into the destination track.",
+    options.requestedCount != null ? `Return exactly ${options.requestedCount} bridgeOptions.` : null,
+    options.namedTransition ? `Named transition to repair exactly: ${options.namedTransition.fromLabel} -> ${options.namedTransition.toLabel}. Do not analyze or repair any other handoff.` : null,
+    ...conversationContextGuidance(options.conversationContext),
+    ...strongContinuityGuidance(),
+    "",
+    `Playlist JSON: ${JSON.stringify(playlist)}`,
+    `User question: ${userQuestion}`
+  ].filter(Boolean));
 }
 
 export function workflowSummaryPrompt(input: {

@@ -22,6 +22,13 @@ import {
 import { emitReviewRoutingTrace } from "@/lib/debug/reviewRouting";
 import { addTracksToPlaylist, applyCuratorResponse, insertTracksAfterTrack, isDuplicateTrack, removeTracksFromPlaylist, touchPlaylist } from "@/lib/playlist/state";
 import { parseTrackRowsFromText, type ParsedTrackLine } from "@/lib/playlist/io/textImport";
+import {
+  classifyComposerRequestLegacy,
+  reviewPromptForComposerRequest,
+  splitMixedComposerRequest,
+  type LegacyComposerRequestKind,
+  type MixedComposerRequestPrompts
+} from "@/lib/playlist/requestRouting";
 import type {
   AnalyzePlaylistResponse,
   AttemptedMatch,
@@ -30,15 +37,13 @@ import type {
   DiscoveryRadius,
   ImportChatResponse,
   PlaylistState,
+  ReviewMode,
   ReviewSuggestion
 } from "@/types/playlist";
 
-export type ComposerRequestKind = "review_only" | "curator_only" | "mixed_review_and_curator";
-
-export type MixedComposerRequestPrompts = {
-  reviewPrompt: string;
-  curatorPrompt: string;
-};
+export type ComposerRequestKind = LegacyComposerRequestKind;
+export { reviewPromptForComposerRequest, splitMixedComposerRequest };
+export type { MixedComposerRequestPrompts };
 
 export type ClientWorkflowResult = {
   assistantMessage: ChatMessage;
@@ -94,87 +99,8 @@ export function effectiveDiscoveryRadiusForRequest(
   return parseDiscoveryRadiusOverride(userMessage) ?? playlist.discoveryRadius ?? "moderate";
 }
 
-function hasReviewSignals(userMessage: string): boolean {
-  return /\b(review|analy[sz]e|critique|what(?:'s| is) working|what should happen next|which tracks? weaken|what weakens|what doesn'?t fit)\b/i.test(userMessage);
-}
-
-function hasCuratorSignals(userMessage: string): boolean {
-  return /\b(add|adding|find|give me|recommend|suggest\b.*\b(?:songs?|tracks?)|replace|replacing|swap|substitute|remove|removing|delete|drop|cut|re-?order|reorganize|resequence|sequence|arrange|rearrange)\b/i.test(userMessage);
-}
-
-function cleanComposerClause(clause: string): string {
-  return clause
-    .replace(/^(?:and|then|and then|after that|afterwards|next)\b[\s,:-]*/i, "")
-    .trim();
-}
-
-function splitComposerIntentClauses(userMessage: string): string[] {
-  const normalized = userMessage.replace(/\s+/g, " ").trim();
-  if (!normalized) {
-    return [];
-  }
-
-  const signalStart = "(?:review|analy[sz]e|critique|what(?:'s| is) working|what should happen next|which tracks? weaken|what weakens|what doesn'?t fit|add|adding|find|give me|recommend|suggest\\b|replace|replacing|swap|substitute|remove|removing|delete|drop|cut|re-?order|reorganize|resequence|sequence|arrange|rearrange)";
-  const clauseDelimited = normalized
-    .replace(/([.!?;])\s+/g, "$1\n")
-    .replace(/\s*,\s*(?=(?:then|and then|after that|afterwards|next)\b)/gi, "\n")
-    .replace(new RegExp(`\\b(?:and|then|and then|after that|afterwards|next)\\b\\s+(?=${signalStart})`, "gi"), "\n");
-
-  return clauseDelimited
-    .split("\n")
-    .map(cleanComposerClause)
-    .filter((clause) => clause.length > 0);
-}
-
-export function splitMixedComposerRequest(userMessage: string): MixedComposerRequestPrompts {
-  const clauses = splitComposerIntentClauses(userMessage);
-  if (clauses.length === 0) {
-    const fallback = userMessage.trim();
-    return { reviewPrompt: fallback, curatorPrompt: fallback };
-  }
-
-  const reviewClauses = clauses.filter((clause) => hasReviewSignals(clause) && !hasCuratorSignals(clause));
-  const curatorClauses = clauses.filter((clause) => hasCuratorSignals(clause) && !hasReviewSignals(clause));
-
-  if (reviewClauses.length === 0 || curatorClauses.length === 0) {
-    const fallback = userMessage.trim();
-    return { reviewPrompt: fallback, curatorPrompt: fallback };
-  }
-
-  return {
-    reviewPrompt: reviewClauses.join(" "),
-    curatorPrompt: curatorClauses.join(" ")
-  };
-}
-
-export function reviewPromptForComposerRequest(userMessage: string): string {
-  const trimmed = userMessage.trim();
-  if (!trimmed) {
-    return "Review this playlist.";
-  }
-
-  if (hasReviewSignals(trimmed) && hasCuratorSignals(trimmed)) {
-    return splitMixedComposerRequest(trimmed).reviewPrompt;
-  }
-
-  return trimmed;
-}
-
 export function classifyComposerRequest(userMessage: string, playlist: PlaylistState): ComposerRequestKind {
-  if (playlist.tracks.length === 0) {
-    return "curator_only";
-  }
-
-  const review = hasReviewSignals(userMessage);
-  const curator = hasCuratorSignals(userMessage);
-
-  if (review && curator) {
-    return "mixed_review_and_curator";
-  }
-  if (review) {
-    return "review_only";
-  }
-  return "curator_only";
+  return classifyComposerRequestLegacy(userMessage, playlist.tracks.length > 0);
 }
 
 function validSubsetOrder(playlist: PlaylistState, orderedTrackIds: string[] | undefined, removedTrackIds: string[]): orderedTrackIds is string[] {
@@ -418,7 +344,7 @@ export function shouldWarnAboutUnverifiedPastedTracks(userMessage: string, playl
   );
 }
 
-export function composeAnalyzeAssistantMessage(data: AnalyzePlaylistResponse): string {
+export function composeAnalyzeAssistantMessage(data: AnalyzePlaylistResponse, playlist?: PlaylistState): string {
   const basisLabel = (basis?: string): string => (
     basis === "metadata_heuristic"
       ? "metadata signal"
@@ -431,6 +357,47 @@ export function composeAnalyzeAssistantMessage(data: AnalyzePlaylistResponse): s
   const debugText = data.debug
     ? `Model debug:\nValidation: ${data.debug.validationError ?? "n/a"}\nRaw output:\n${JSON.stringify(data.debug.modelRawOutput, null, 2)}`
     : null;
+  const trackById = new Map((playlist?.tracks ?? []).map((track) => [track.id, track]));
+  const labelForTrackId = (trackId: string): string => {
+    const track = trackById.get(trackId);
+    return track ? `${track.artist} - ${track.title}` : trackId;
+  };
+  const labelForSuggestion = (trackIds: string[]): string | null => {
+    const labels = trackIds.map((trackId) => labelForTrackId(trackId));
+    return labels.length > 0 ? labels.join("; ") : null;
+  };
+  if (data.reviewMode === "focused_transition_repair" || data.reviewMode === "bridge_options_only") {
+    const transitionText = data.transitionReview.length
+      ? `Transition diagnosis:\n${data.transitionReview.slice(0, 1).map((item) => `- ${item.summary} (${basisLabel(item.basis)})`).join("\n")}`
+      : null;
+    const suggestionText = data.reviewSuggestions.length
+      ? `Bridge options:\n${data.reviewSuggestions.map((item) => {
+        const candidateLabel = item.candidate ? `${item.candidate.artist} - ${item.candidate.title}` : item.rationale;
+        const roleText = item.candidate ? item.rationale.replace(new RegExp(`^${item.candidate.artist} - ${item.candidate.title}:\\s*`), "") : item.rationale;
+        return `- ${candidateLabel}: ${roleText} (${basisLabel(item.basis)})`;
+      }).join("\n")}`
+      : null;
+    return [data.curatorTake ?? data.message, transitionText, suggestionText, debugText].filter(Boolean).join("\n\n");
+  }
+  if (data.reviewMode === "diagnose_only") {
+    const evidenceText = [
+      data.sequencingNotes.length ? `Evidence:\n${data.sequencingNotes.map((item) => `- ${item}`).join("\n")}` : null,
+      data.transitionReview.length ? `Transitions:\n${data.transitionReview.slice(0, 3).map((item) => `- ${item.summary} (${basisLabel(item.basis)})`).join("\n")}` : null
+    ].filter(Boolean).join("\n\n");
+    return [data.curatorTake ?? data.message, evidenceText, debugText].filter(Boolean).join("\n\n");
+  }
+  if (data.reviewMode === "weak_links_only") {
+    const weakLinkText = data.weakLinks.length
+      ? `Weak links:\n${data.weakLinks.map((item) => `- ${labelForTrackId(item.trackId)}: ${item.reason}`).join("\n")}`
+      : null;
+    const suggestionText = data.reviewSuggestions.length
+      ? `Suggested cuts:\n${data.reviewSuggestions.map((item) => {
+        const label = labelForSuggestion(item.affectedTrackIds);
+        return `- ${label ? `${label}: ` : ""}${item.rationale} (${basisLabel(item.basis)})`;
+      }).join("\n")}`
+      : null;
+    return [data.curatorTake ?? data.message, weakLinkText, suggestionText, debugText].filter(Boolean).join("\n\n");
+  }
   const identityText = data.intentSummary?.playlistIdentity
     ? `Playlist identity: ${data.intentSummary.playlistIdentity}`
     : null;
@@ -448,7 +415,7 @@ export function composeAnalyzeAssistantMessage(data: AnalyzePlaylistResponse): s
     ? `Transitions:\n${data.transitionReview.slice(0, 5).map((item) => `- ${item.issueType}: ${item.summary} (${basisLabel(item.basis)})`).join("\n")}`
     : null;
   const suggestionText = data.reviewSuggestions.length
-    ? `Suggested edits:\n${data.reviewSuggestions.slice(0, 5).map((item) => `- ${item.type}: ${item.rationale} (${basisLabel(item.basis)})`).join("\n")}`
+    ? `Suggested follow-ups:\n${data.reviewSuggestions.slice(0, 5).map((item) => `- ${item.type}: ${item.rationale} (${basisLabel(item.basis)})`).join("\n")}`
     : null;
   const verifiedObservationBlocks = [
     data.constraintReport.violations.length ? `Verified-rule issues:\n${data.constraintReport.violations.map((item) => `- ${item.message}`).join("\n")}` : null,
@@ -482,6 +449,7 @@ export async function runAnalyzeWorkflow(
     requestId?: string;
     userMessage: string;
     messages?: ChatMessage[];
+    reviewMode?: ReviewMode;
   },
   dependencies: AnalyzeWorkflowDependencies = {}
 ): Promise<ClientWorkflowResult> {
@@ -504,9 +472,10 @@ export async function runAnalyzeWorkflow(
       input.playlist,
       input.userMessage || undefined,
       buildConversationContext(input.messages ?? []),
-      input.requestId
+      input.requestId,
+      input.reviewMode
     );
-    const assistantContent = composeAnalyzeAssistantMessage(data);
+    const assistantContent = composeAnalyzeAssistantMessage(data, input.playlist);
     emitReviewRoutingTrace("workflow.runAnalyze.result", {
       requestId: input.requestId ?? null,
       assistantContainsReordered: assistantContent.includes("Reordered "),
@@ -540,11 +509,13 @@ export async function runMixedReviewAndCuratorWorkflow(
     outgoing: string;
     playlist: PlaylistState;
     requestId?: string;
+    reviewMode?: ReviewMode;
   },
-  dependencies: MixedReviewAndCuratorWorkflowDependencies
+  dependencies: MixedReviewAndCuratorWorkflowDependencies,
+  prompts?: MixedComposerRequestPrompts
 ): Promise<MixedReviewAndCuratorWorkflowResult> {
   const requestMessages = createRequestMessageList(input.messages, input.outgoing);
-  const { reviewPrompt, curatorPrompt } = splitMixedComposerRequest(input.outgoing);
+  const { reviewPrompt, curatorPrompt } = prompts ?? splitMixedComposerRequest(input.outgoing);
   emitReviewRoutingTrace("workflow.runMixed.start", {
     requestId: input.requestId ?? null,
     outgoing: input.outgoing,
@@ -556,7 +527,8 @@ export async function runMixedReviewAndCuratorWorkflow(
       playlist: input.playlist,
       requestId: input.requestId,
       userMessage: reviewPrompt,
-      messages: input.messages
+      messages: input.messages,
+      reviewMode: input.reviewMode
     },
     { analyze: dependencies.analyze }
   );

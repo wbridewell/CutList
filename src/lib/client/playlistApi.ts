@@ -3,7 +3,9 @@ import type {
   ConversationContext,
   CuratorResponse,
   ImportChatResponse,
-  PlaylistState
+  PlaylistState,
+  ReviewMode,
+  ResolvedUserRequestPlan
 } from "@/types/playlist";
 import { exportPlaylist } from "@/lib/playlist/io/exports";
 import type { PlaylistExportFormat } from "@/lib/playlist/io/exportFormats";
@@ -13,6 +15,7 @@ import {
   invokeDesktopExport,
   invokeDesktopImport,
   invokeDesktopMessage,
+  invokeDesktopPlanUserRequest,
   invokeDesktopVerify
 } from "@/lib/client/desktopApi";
 import { isTauriApp } from "@/lib/client/tauriRuntime";
@@ -38,9 +41,20 @@ export async function analyzePlaylist(
   playlist: PlaylistState,
   userQuestion?: string,
   conversationContext?: ConversationContext,
-  requestId?: string
+  requestId?: string,
+  reviewMode?: ReviewMode
 ): Promise<AnalyzePlaylistResponse> {
-  return invokeDesktopAnalyze({ playlist, requestId, userQuestion, conversationContext });
+  return invokeDesktopAnalyze({ playlist, requestId, userQuestion, reviewMode, conversationContext });
+}
+
+export async function planPlaylistRequest(
+  playlist: PlaylistState,
+  userMessage: string,
+  conversationContext?: ConversationContext,
+  requestId?: string,
+  forceReadOnly = false
+): Promise<ResolvedUserRequestPlan> {
+  return invokeDesktopPlanUserRequest({ playlist, requestId, userMessage, conversationContext, forceReadOnly });
 }
 
 export async function downloadPlaylistExport(

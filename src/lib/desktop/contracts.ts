@@ -7,6 +7,8 @@ import type {
   ImportChatRequest,
   ImportChatResponse,
   PlaylistMessageRequest,
+  ResolvedUserRequestPlan,
+  UserRequestPlanRequest,
   VerifyRequest,
   VerifyResponse
 } from "@/types/playlist";
@@ -19,6 +21,7 @@ export const desktopCommandNames = {
   getLlmSetup: "desktop_get_llm_setup",
   getWorkspaceState: "desktop_get_workspace_state",
   importChat: "desktop_import_chat",
+  planUserRequest: "desktop_plan_user_request",
   playlistMessage: "desktop_playlist_message",
   revealInFileManager: "desktop_reveal_in_file_manager",
   saveLlmSetup: "desktop_save_llm_setup",
@@ -85,6 +88,7 @@ export type DesktopAnalyzePayload = AnalyzePlaylistRequest;
 export type DesktopVerifyPayload = VerifyRequest;
 export type DesktopImportPayload = ImportChatRequest;
 export type DesktopExportPayload = ExportRequest;
+export type DesktopUserRequestPlanPayload = UserRequestPlanRequest;
 
 export type DesktopExportResult =
   | {
@@ -114,6 +118,7 @@ export type DesktopBackendPayloadMap = {
   getLlmSetup: undefined;
   getWorkspaceState: undefined;
   importChat: DesktopImportPayload;
+  planUserRequest: DesktopUserRequestPlanPayload;
   playlistMessage: DesktopPlaylistMessagePayload;
   revealInFileManager: DesktopRevealPathPayload;
   saveLlmSetup: LLMSetupPayload;
@@ -128,6 +133,7 @@ export type DesktopBackendResultMap = {
   getLlmSetup: LLMSetupResponse;
   getWorkspaceState: DesktopWorkspaceStateResponse;
   importChat: ImportChatResponse;
+  planUserRequest: ResolvedUserRequestPlan;
   playlistMessage: CuratorResponse;
   revealInFileManager: {
     ok: true;

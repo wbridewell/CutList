@@ -1,5 +1,7 @@
 import { playlistRemovalPrompt } from "@/lib/ai/prompts";
 import { attemptLlmContract } from "@/lib/ai/services/llmService";
+import { normalizeText } from "@/lib/music/normalize";
+import { deterministicAnalyzePlaylist } from "@/lib/playlist/analysis/deterministicAnalyze";
 import { evaluatePlaylistConstraints } from "@/lib/playlist/constraints";
 import type { CuratorRunOptions } from "@/lib/ai/curatorTypes";
 import type { CuratorResponse, PlaylistState, Track } from "@/types/playlist";
@@ -36,6 +38,91 @@ function tracksRemovedByConstraints(playlist: PlaylistState, constraints: Playli
     .map((violation) => violation.trackId)
     .filter((trackId): trackId is string => trackId != null));
   return playlist.tracks.filter((track) => removedIds.has(track.id));
+}
+
+function hasWeakestTrackLanguage(message: string): boolean {
+  return /\bweak(est|er)?\b|\bdead weight\b|\boutlier\b|\bsoft spot(s)?\b|\bdrag(s|ging)?\b|\bclutter\b|\bdilute(s|d|ing)?\b/i.test(message);
+}
+
+function fallbackReplacementTargets(playlist: PlaylistState, replaceCount: number | null, userMessage: string): Track[] {
+  const requestedCount = Math.max(1, replaceCount ?? 1);
+  const deterministic = deterministicAnalyzePlaylist(playlist);
+  const selectedIds: string[] = [];
+
+  for (const weakLink of deterministic.weakLinks) {
+    if (!selectedIds.includes(weakLink.trackId)) {
+      selectedIds.push(weakLink.trackId);
+    }
+    if (selectedIds.length >= requestedCount) {
+      return uniqueExistingRemovalTracks(playlist, selectedIds);
+    }
+  }
+
+  if (!hasWeakestTrackLanguage(userMessage)) {
+    return [];
+  }
+
+  const transitionPenalty = new Map<string, number>();
+  for (const transition of deterministic.transitionReview) {
+    if (transition.issueType !== "abrupt_energy_jump" && transition.issueType !== "weak_bridge" && transition.issueType !== "flat_ending") {
+      continue;
+    }
+    transitionPenalty.set(transition.fromTrackId, (transitionPenalty.get(transition.fromTrackId) ?? 0) + 1);
+    transitionPenalty.set(transition.toTrackId, (transitionPenalty.get(transition.toTrackId) ?? 0) + 1);
+  }
+
+  const genreCounts = new Map<string, number>();
+  for (const track of playlist.tracks) {
+    for (const genre of track.genreTags) {
+      const normalized = normalizeText(genre);
+      if (normalized) {
+        genreCounts.set(normalized, (genreCounts.get(normalized) ?? 0) + 1);
+      }
+    }
+  }
+  const dominantGenres = [...genreCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 2)
+    .map(([genre]) => genre);
+  const energyValues = playlist.tracks
+    .map((track) => track.energy)
+    .filter((energy): energy is number => energy != null)
+    .sort((a, b) => a - b);
+  const medianEnergy = energyValues.length > 0
+    ? energyValues[Math.floor(energyValues.length / 2)]
+    : null;
+
+  const rankedTracks = playlist.tracks
+    .map((track, index) => {
+      const normalizedGenres = track.genreTags
+        .map((genre) => normalizeText(genre))
+        .filter((genre): genre is string => Boolean(genre));
+      const genreSupport = normalizedGenres.reduce((total, genre) => total + (genreCounts.get(genre) ?? 0), 0);
+      const sharesDominantGenre = dominantGenres.length === 0 || normalizedGenres.some((genre) => dominantGenres.includes(genre));
+      const lowEnergyPenalty = medianEnergy != null && track.energy != null && track.energy < medianEnergy ? 1 : 0;
+      const score = (
+        (sharesDominantGenre ? 0 : 3) +
+        (normalizedGenres.length === 0 ? 1 : 0) +
+        (genreSupport <= 1 ? 2 : genreSupport <= 2 ? 1 : 0) +
+        lowEnergyPenalty +
+        (transitionPenalty.get(track.id) ?? 0)
+      );
+      return { track, index, score };
+    })
+    .filter(({ track }) => !selectedIds.includes(track.id))
+    .sort((a, b) => b.score - a.score || a.index - b.index);
+
+  for (const candidate of rankedTracks) {
+    if (candidate.score <= 0) {
+      break;
+    }
+    selectedIds.push(candidate.track.id);
+    if (selectedIds.length >= requestedCount) {
+      break;
+    }
+  }
+
+  return uniqueExistingRemovalTracks(playlist, selectedIds);
 }
 
 export async function selectReplacementTargets(
@@ -76,10 +163,14 @@ export async function selectReplacementTargets(
   }
 
   const selectedTracks = uniqueExistingRemovalTracks(playlist, attempt.parsed.removeTrackIds);
-  if (replaceCount != null && selectedTracks.length > replaceCount) {
-    return selectedTracks.slice(0, replaceCount);
+  if (selectedTracks.length > 0) {
+    if (replaceCount != null && selectedTracks.length > replaceCount) {
+      return selectedTracks.slice(0, replaceCount);
+    }
+    return selectedTracks;
   }
-  return selectedTracks;
+
+  return fallbackReplacementTargets(playlist, replaceCount, plan.userMessage);
 }
 
 export async function executeRemovalPlan(

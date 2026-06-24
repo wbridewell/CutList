@@ -26,6 +26,12 @@ describe("compression analysis helpers", () => {
     expect(parseCompressionRequest("Review this playlist and name the two tracks that weaken its identity.")).toBeNull();
   });
 
+  it("does not mistake per-track runtime preferences for playlist compression", () => {
+    expect(parseCompressionRequest(
+      "Repair only the transition from Firestarter into Roads. Recommend 3 bridge tracks. Prefer tracks under 5 minutes."
+    )).toBeNull();
+  });
+
   it("filters compression suggestions when the review was not explicitly about compression", () => {
     const suggestions: ReviewSuggestion[] = [{
       id: "compress-1",

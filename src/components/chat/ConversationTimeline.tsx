@@ -123,6 +123,9 @@ function rejectedCandidateHistoryLabel(entry: RequestHistoryEntry, candidate: Re
 
 function reviewSuggestionHistoryLabel(entry: RequestHistoryEntry, suggestion: ReviewSuggestion): string {
   const status = reviewSuggestionStatusForEntry(entry, suggestion.id);
+  if (suggestion.applicationMode === "informational" && status === "open") {
+    return "Informational";
+  }
   switch (status) {
     case "applied":
       return "Applied";
@@ -203,7 +206,10 @@ export function ConversationTimeline({ history }: Props) {
               ) : null}
               {entry.reviewSuggestions?.length ? (
                 <div className="timeline-review-statuses">
-                  <h4>Review suggestion outcomes</h4>
+                  <h4>{entry.reviewSuggestions.every((suggestion) => suggestion.applicationMode === "informational")
+                    ? "Review notes"
+                    : "Review suggestion outcomes"}
+                  </h4>
                   <ul className="timeline-review-list">
                     {entry.reviewSuggestions.map((suggestion) => (
                       <li key={suggestion.id}>

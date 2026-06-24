@@ -158,7 +158,7 @@ export function createPlaylistReviewHistoryEntry(
     createdAt,
     kind: "review",
     reviewSuggestions: review.reviewSuggestions,
-    issueStatuses: createReviewSuggestionIssueStatuses(review.reviewSuggestions)
+    issueStatuses: []
   };
 }
 

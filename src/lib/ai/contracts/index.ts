@@ -3,10 +3,19 @@ import { antiHallucinationGuidance } from "@/lib/ai/guidance";
 import {
   AnalyzePlaylistResponseSchema,
   CandidateBatchSchema,
+  CandidateTrackSchema,
   ImportChatExtractionSchema,
   InstructionIntentSchema,
+  OperatorDeclaredEntitiesSchema,
+  OperatorParameterHintsSchema,
+  OperatorPlanNodeSchema,
+  OperatorPlanTemplateSchema,
   PlaylistRemovalDecisionSchema,
-  PlaylistShapeSchema
+  PlaylistShapeSchema,
+  ReviewModeSchema,
+  UserRequestExecutionPolicySchema,
+  UserRequestRouteFamilySchema,
+  UserRequestRoutingConfidenceSchema
 } from "@/lib/playlist/schemas";
 
 export type LlmContractId =
@@ -17,7 +26,9 @@ export type LlmContractId =
   | "playlistRemoval"
   | "importChat"
   | "matchReview"
+  | "operatorPlan"
   | "playlistCritique"
+  | "playlistTransitionRepair"
   | "workflowSummary";
 
 export type LlmContract<TSchema extends z.ZodTypeAny = z.ZodTypeAny> = {
@@ -51,14 +62,33 @@ const curatorStepPlanSchema = z.object({
 const workflowSummarySchema = z.object({
   message: z.string().min(1)
 });
+const operatorPlanSchema = z.object({
+  routeFamily: UserRequestRouteFamilySchema,
+  executionPolicy: UserRequestExecutionPolicySchema,
+  planTemplate: OperatorPlanTemplateSchema,
+  reviewMode: ReviewModeSchema.nullable().default(null),
+  operators: z.array(OperatorPlanNodeSchema).default([]),
+  declaredEntities: OperatorDeclaredEntitiesSchema,
+  parameterHints: OperatorParameterHintsSchema,
+  confidence: UserRequestRoutingConfidenceSchema,
+  planningNotes: z.array(z.string()).default([])
+});
 
 const playlistCritiqueSchema = AnalyzePlaylistResponseSchema.omit({ constraintReport: true });
+const playlistTransitionRepairSchema = z.object({
+  message: z.string().min(1),
+  transitionSummary: z.string().min(1),
+  bridgeOptions: z.array(z.object({
+    candidate: CandidateTrackSchema,
+    role: z.string().min(1)
+  })).min(1).max(5)
+});
 
 export const llmContracts = [
   {
     id: "instructionIntent",
     schema: InstructionIntentSchema,
-    shapeDescription: "{\"operationIntent\":{\"type\":\"add\"|\"remove\"|\"replace\"|\"reorder\"|\"analyze\"|\"import\"|\"other\",\"requestedTrackCount\":number|null,\"targetTotalTrackCount\":number|null,\"replaceCount\":number|null,\"confidence\":\"high\"|\"medium\"|\"low\"},\"verifiedRules\":object,\"curatorGuidance\":object,\"scopeIntent\":{\"persistentVerifiedRuleFields\":string[],\"persistentGuidanceFields\":string[],\"requestScopedVerifiedRuleFields\":string[],\"requestScopedGuidanceFields\":string[]},\"notes\":string[]}",
+    shapeDescription: "{\"operationIntent\":{\"type\":\"add\"|\"remove\"|\"replace\"|\"reorder\"|\"analyze\"|\"import\"|\"other\",\"requestedTrackCount\":number|null,\"targetTotalTrackCount\":number|null,\"replaceCount\":number|null,\"confidence\":\"high\"|\"medium\"|\"low\"},\"verifiedRules\":object,\"curatorGuidance\":object,\"routingIntent\":{\"routeFamily\":\"review\"|\"curator\"|\"import\"|\"conversational\",\"allowMutation\":boolean,\"diagnosisOnly\":boolean,\"hypotheticalOnly\":boolean,\"reviewMode\":\"full_critique\"|\"diagnose_only\"|\"weak_links_only\"|\"focused_transition_repair\"|\"bridge_options_only\"|\"compression_review\"|\"ending_repair\"|\"sequencing_only\"|null},\"scopeIntent\":{\"persistentVerifiedRuleFields\":string[],\"persistentGuidanceFields\":string[],\"requestScopedVerifiedRuleFields\":string[],\"requestScopedGuidanceFields\":string[]},\"notes\":string[]}",
     safetyGuidance: [
       "Always include every top-level key in that JSON shape. Use null, {}, or [] for empty values instead of omitting keys.",
       "Do not return prose before or after the JSON object."
@@ -137,9 +167,25 @@ export const llmContracts = [
     parse: (value) => matchReviewSchema.parse(value)
   },
   {
+    id: "operatorPlan",
+    schema: operatorPlanSchema,
+    shapeDescription: "{\"routeFamily\":\"review\"|\"curator\"|\"import\"|\"conversational\",\"executionPolicy\":\"read_only\"|\"mutating\",\"planTemplate\":\"focused_transition_review\"|\"bridge_options_review\"|\"diagnosis_review\"|\"weak_links_review\"|\"compression_review\"|\"sequencing_review\"|\"curator_mutation\"|\"import_request\"|\"conversational_reply\",\"reviewMode\":\"full_critique\"|\"diagnose_only\"|\"weak_links_only\"|\"focused_transition_repair\"|\"bridge_options_only\"|\"compression_review\"|\"ending_repair\"|\"sequencing_only\"|null,\"operators\":OperatorPlanNode[],\"declaredEntities\":{\"namedTracks\":string[],\"transition\":{\"fromText\":string,\"toText\":string}|null,\"targetSpan\":string|null},\"parameterHints\":{\"requestedCount\":number|null,\"targetTotalTrackCount\":number|null,\"replacementCount\":number|null,\"maxTrackDurationMs\":number|null,\"avoidArtistRepeats\":boolean,\"preserve\":string[],\"avoid\":string[]},\"confidence\":\"high\"|\"medium\"|\"low\",\"planningNotes\":string[]}",
+    safetyGuidance: [
+      "Return only JSON with a typed operator plan. Do not add prose before or after it.",
+      "Choose only from the provided operator kinds. Never invent a new mutating operator.",
+      "Use named transition entities when the user specifies a handoff between two tracks."
+    ],
+    outputGuidance: [
+      "Use read_only for diagnosis, critique, bridge, transition, sequencing-only review, and any prompt that says not to modify the playlist.",
+      "Use mutating only for actual add, remove, replace, reorder, or import requests.",
+      "Focused transition review plans should normally include resolve_named_tracks, analyze_transition, generate_bridge_options, and summarize_for_user."
+    ],
+    parse: (value) => operatorPlanSchema.parse(value)
+  },
+  {
     id: "playlistCritique",
     schema: playlistCritiqueSchema,
-    shapeDescription: "{\"curatorTake\": string, \"message\": string, \"strengths\": string[], \"weakLinks\": [{\"trackId\": string, \"reason\": string}], \"sequencingNotes\": string[], \"suggestedEdits\": [{\"type\": \"remove\" | \"move\" | \"replace\" | \"add\", \"reason\": string, \"trackId\"?: string, \"candidate\"?: CandidateTrack}], \"intentSummary\": {\"playlistIdentity\": string, \"preservedQualities\": string[], \"likelyUserIntent\": string, \"riskNotes\": string[], \"confidence\": \"high\" | \"medium\" | \"low\"}, \"trackRoles\": [{\"trackId\": string, \"role\": string, \"rationale\": string, \"confidence\": \"high\" | \"medium\" | \"low\"}], \"transitionReview\": [{\"fromTrackId\": string, \"toTrackId\": string, \"issueType\": string, \"summary\": string, \"suggestedRepair\": string | null, \"confidence\": \"high\" | \"medium\" | \"low\"}], \"reviewSuggestions\": [{\"id\": string, \"type\": \"remove\" | \"move\" | \"replace\" | \"add\" | \"reorder\" | \"add_bridge\" | \"compress_section\" | \"improve_ending\", \"applicationMode\": \"remove_existing\" | \"reorder_existing\" | \"verify_candidate\" | \"informational\", \"affectedTrackIds\": string[], \"rationale\": string, \"intentPreservation\": string, \"risk\": string | null, \"confidence\": \"high\" | \"medium\" | \"low\", \"candidate\"?: CandidateTrack, \"suggestedPrompt\": string | null, \"orderedTrackIds\"?: string[], \"compressionPlan\"?: {\"removeTrackIds\": string[], \"keepTrackIds\"?: string[], \"targetTrackCount\"?: number | null, \"targetTotalDurationMs\"?: number | null}, \"sectionLabel\"?: string | null, \"sectionStartTrackId\"?: string | null, \"sectionEndTrackId\"?: string | null}]}",
+    shapeDescription: "{\"reviewMode\":\"full_critique\"|\"diagnose_only\"|\"weak_links_only\"|\"focused_transition_repair\"|\"bridge_options_only\"|\"compression_review\"|\"ending_repair\"|\"sequencing_only\", \"curatorTake\": string, \"message\": string, \"strengths\": string[], \"weakLinks\": [{\"trackId\": string, \"reason\": string}], \"sequencingNotes\": string[], \"suggestedEdits\": [{\"type\": \"remove\" | \"move\" | \"replace\" | \"add\", \"reason\": string, \"trackId\"?: string, \"candidate\"?: CandidateTrack}], \"intentSummary\": {\"playlistIdentity\": string, \"preservedQualities\": string[], \"likelyUserIntent\": string, \"riskNotes\": string[], \"confidence\": \"high\" | \"medium\" | \"low\"}, \"trackRoles\": [{\"trackId\": string, \"role\": string, \"rationale\": string, \"confidence\": \"high\" | \"medium\" | \"low\"}], \"transitionReview\": [{\"fromTrackId\": string, \"toTrackId\": string, \"issueType\": string, \"summary\": string, \"suggestedRepair\": string | null, \"confidence\": \"high\" | \"medium\" | \"low\"}], \"reviewSuggestions\": [{\"id\": string, \"type\": \"remove\" | \"move\" | \"replace\" | \"add\" | \"reorder\" | \"add_bridge\" | \"compress_section\" | \"improve_ending\", \"applicationMode\": \"remove_existing\" | \"reorder_existing\" | \"verify_candidate\" | \"informational\", \"affectedTrackIds\": string[], \"rationale\": string, \"intentPreservation\": string, \"risk\": string | null, \"confidence\": \"high\" | \"medium\" | \"low\", \"candidate\"?: CandidateTrack, \"suggestedPrompt\": string | null, \"orderedTrackIds\"?: string[], \"compressionPlan\"?: {\"removeTrackIds\": string[], \"keepTrackIds\"?: string[], \"targetTrackCount\"?: number | null, \"targetTotalDurationMs\"?: number | null}, \"sectionLabel\"?: string | null, \"sectionStartTrackId\"?: string | null, \"sectionEndTrackId\"?: string | null}]}",
     safetyGuidance: [
       "Do not mutate the playlist.",
       antiHallucinationGuidance.providedMetadataOnly,
@@ -157,6 +203,22 @@ export const llmContracts = [
       "Do not put verified-track fields such as durationMs, runtime, source IDs, genreTags, or rationale inside candidate."
     ],
     parse: (value) => playlistCritiqueSchema.parse(value)
+  },
+  {
+    id: "playlistTransitionRepair",
+    schema: playlistTransitionRepairSchema,
+    shapeDescription: "{\"message\": string, \"transitionSummary\": string, \"bridgeOptions\": [{\"candidate\": CandidateTrack, \"role\": string}]}",
+    safetyGuidance: [
+      "Do not mutate the playlist.",
+      antiHallucinationGuidance.providedMetadataOnly,
+      "Return only JSON."
+    ],
+    outputGuidance: [
+      `CandidateTrack is exactly ${candidateTrackShape}.`,
+      "Return exactly the requested number of bridgeOptions when the user specifies a count.",
+      "Each bridgeOptions.role must explain the function of that bridge track in the transition."
+    ],
+    parse: (value) => playlistTransitionRepairSchema.parse(value)
   },
   {
     id: "workflowSummary",

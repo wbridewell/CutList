@@ -105,12 +105,7 @@ describe("collaboration helpers", () => {
       kind: "review"
     });
     expect(review.reviewSuggestions).toEqual(reviewData.reviewSuggestions);
-    expect(review.issueStatuses).toEqual([{
-      issueId: "suggestion-1",
-      issueKind: "review_suggestion",
-      status: "open",
-      actedAt: null
-    }]);
+    expect(review.issueStatuses).toEqual([]);
     expect(manual).toMatchObject({
       userMessage: "Accepted reviewed match",
       assistantMessage: "Added Artist - Song.",

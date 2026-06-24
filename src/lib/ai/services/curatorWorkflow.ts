@@ -169,6 +169,20 @@ async function executeGenerationStyleStep(
     }
   }
 
+  if (stepPlan.operation === "replace" && preGenerationRemovedTracks.length === 0) {
+    return {
+      response: {
+        message: "No tracks were replaced because I could not identify valid existing tracks to remove. Please name the target tracks or ask for a diagnosis-only review first.",
+        playlistUpdate: null,
+        playlistMeta: null,
+        updatedConstraints: stepPlan.constraintState.persistedConstraintsAfterSuccess,
+        constraintReport: evaluatePlaylistConstraints(stepPlan.playlist.tracks, stepPlan.constraintState.activeConstraints),
+        rejectedCandidates: []
+      },
+      nextActiveConstraints: stepPlan.constraintState.activeConstraints
+    };
+  }
+
   const fillCount = stepPlan.targetTotalTrackCount == null ? null : Math.max(0, stepPlan.targetTotalTrackCount - baseTracks.length);
   const effectiveRequestedCount = fillCount
     ?? stepPlan.requestedAddCount

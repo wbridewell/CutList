@@ -24,6 +24,13 @@ describe("curator request intent helpers", () => {
       },
       verifiedRules: {},
       curatorGuidance: { vocalProfile: "female_vocals" },
+      routingIntent: {
+        routeFamily: "curator",
+        allowMutation: true,
+        diagnosisOnly: false,
+        hypotheticalOnly: false,
+        reviewMode: null
+      },
       scopeIntent: {
         persistentVerifiedRuleFields: [],
         persistentGuidanceFields: ["vocalProfile"],
@@ -57,6 +64,13 @@ describe("curator request intent helpers", () => {
       },
       verifiedRules: {},
       curatorGuidance: { vocalProfile: "female_vocals" },
+      routingIntent: {
+        routeFamily: "curator",
+        allowMutation: true,
+        diagnosisOnly: false,
+        hypotheticalOnly: false,
+        reviewMode: null
+      },
       scopeIntent: {
         persistentVerifiedRuleFields: [],
         persistentGuidanceFields: ["vocalProfile"],

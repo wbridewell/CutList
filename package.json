@@ -16,6 +16,8 @@
     "build:release-assets": "npm run build:ui && npm run build:desktop-runtime",
     "build:dmg": "node scripts/build-macos-dmg.mjs",
     "first-run": "node scripts/first-run.mjs",
+    "sync:public": "node scripts/sync-public.mjs",
+    "sync:public:push": "node scripts/sync-public.mjs --push-origin",
     "start-alpha": "node scripts/first-run.mjs --start-alpha",
     "tauri:dev": "tauri dev",
     "tauri:build": "CUTLIST_RELEASE_PACKAGING=1 tauri build --bundles app --config src-tauri/tauri.release.conf.json",

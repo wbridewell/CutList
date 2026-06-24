@@ -20,6 +20,13 @@ const baseIntent: InstructionIntent = {
   curatorGuidance: {
     requiredGenreAdditions: [{ genre: "hard rock", count: 5 }]
   },
+  routingIntent: {
+    routeFamily: "curator",
+    allowMutation: true,
+    diagnosisOnly: false,
+    hypotheticalOnly: false,
+    reviewMode: null
+  },
   scopeIntent: {
     persistentVerifiedRuleFields: ["maxTrackDurationMs", "excludedArtists"],
     persistentGuidanceFields: [],
@@ -75,6 +82,13 @@ describe("prompt harness scoring", () => {
         },
         verifiedRules: {},
         curatorGuidance: {},
+        routingIntent: {
+          routeFamily: "curator",
+          allowMutation: true,
+          diagnosisOnly: false,
+          hypotheticalOnly: false,
+          reviewMode: null
+        },
         scopeIntent: {
           persistentVerifiedRuleFields: [],
           persistentGuidanceFields: [],
@@ -107,6 +121,13 @@ describe("prompt harness scoring", () => {
         },
         verifiedRules: {},
         curatorGuidance: {},
+        routingIntent: {
+          routeFamily: "curator",
+          allowMutation: true,
+          diagnosisOnly: false,
+          hypotheticalOnly: false,
+          reviewMode: null
+        },
         scopeIntent: {
           persistentVerifiedRuleFields: [],
           persistentGuidanceFields: [],
@@ -148,6 +169,7 @@ describe("prompt harness scoring", () => {
     const fixture = reviewHarnessFixtures.find((item) => item.id === "review-abrupt-bridge");
     expect(fixture).toBeDefined();
     const response: AnalyzePlaylistResponse = {
+      reviewMode: "full_critique",
       message: "Unsafe.",
       strengths: [],
       weakLinks: [],

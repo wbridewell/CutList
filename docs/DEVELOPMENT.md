@@ -66,6 +66,8 @@ Curator personality is now selected in-app from `Curator persona` next to `LLM s
 - `npm run next:dev`: start only the embedded Next.js development server, without the desktop shell.
 - `npm run first-run`: install dependencies when needed and start the local alpha onboarding path.
 - `npm run start-alpha`: start the already-set-up local alpha.
+- `npm run sync:public`: copy the current committed repo snapshot into the sibling public repo at `../CutList-public` and create one fresh public commit there.
+- `npm run sync:public:push`: run the same sync, then push the public repo's `main` branch to its `origin`.
 - `npm run test`: run Vitest tests.
 - `npm run prompt:harness`: run live playlist-generation prompt evals against the configured LLM provider.
 - `npm run eval:cross-cutting`: run the dated cross-workflow evaluation pack for generation, review, replace, compression, and discovery-radius comparisons.
@@ -76,6 +78,14 @@ Curator personality is now selected in-app from `Curator persona` next to `LLM s
 - `npm run build:dmg`: build the macOS DMG release artifact. This is release packaging, not the normal development build. It uses the bundled portable Node when available; set `CUTLIST_NODE_RUNTIME_PATH` only to override it.
 
 ## Common Workflows
+
+### Public Mirror Sync
+
+Use `npm run sync:public` from this private repo when you want the public repo to catch up without sharing private prehistory.
+
+The script publishes the current committed `HEAD` snapshot into `../CutList-public`, creates a fresh commit there, and leaves the public history rooted in the separate public repository. It refuses to run if the public repo has uncommitted changes.
+
+Use `npm run sync:public:push` if you also want the public repo pushed to its GitHub `origin` in the same step.
 
 - Add schemas in `src/lib/playlist/schemas.ts` before changing API contracts.
 - Add playlist state helpers in `src/lib/playlist`.
