@@ -6,6 +6,7 @@ type Props = {
   busy?: boolean;
   curatorUndoDescription?: string | null;
   messages: ChatMessage[];
+  onReusePrompt?: (prompt: string) => void;
   onUndoCuratorTurn?: () => void;
   progressStatus?: string | null;
 };
@@ -30,6 +31,7 @@ export function ActiveExchange({
   busy = false,
   curatorUndoDescription = null,
   messages,
+  onReusePrompt,
   onUndoCuratorTurn,
   progressStatus
 }: Props) {
@@ -45,7 +47,18 @@ export function ActiveExchange({
         {busy ? <span className="exchange-status">Working</span> : null}
       </div>
       <div className="active-exchange-log" aria-live="polite">
-        {userMessage ? <div className="exchange-bubble user">{userMessage.content}</div> : null}
+        {userMessage ? (
+          <div className="exchange-bubble user">
+            {userMessage.content}
+            {onReusePrompt ? (
+              <div className="replay-actions">
+                <button className="button-secondary button-compact" type="button" onClick={() => onReusePrompt(userMessage.content)}>
+                  Reuse prompt
+                </button>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
         {progressStatus ? (
           <div className="exchange-bubble progress">
             <span className="progress-dot" aria-hidden="true" />

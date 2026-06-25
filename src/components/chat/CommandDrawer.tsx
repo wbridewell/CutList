@@ -31,6 +31,7 @@ type Props = {
   onLoadSession?: (id: string) => void;
   onModeChange: (mode: UtilitySection | null) => void;
   onReloadWorkspace?: () => Promise<void>;
+  onReusePrompt?: (prompt: string) => void;
   onReviewCompression?: (suggestion: ReviewSuggestion) => void;
   onSaveSession?: (name?: string) => void;
   onSeedTextChange: (value: string) => void;
@@ -106,6 +107,7 @@ export function CommandDrawer({
   onLoadSession,
   onModeChange,
   onReloadWorkspace,
+  onReusePrompt,
   onReviewCompression,
   onSaveSession,
   onSeedTextChange,
@@ -209,7 +211,7 @@ export function CommandDrawer({
           ) : null}
 
           {activeMode === "history" ? (
-            <HistorySection history={history} />
+            <HistorySection history={history} onReusePrompt={onReusePrompt} />
           ) : null}
         </div>
       ) : null}

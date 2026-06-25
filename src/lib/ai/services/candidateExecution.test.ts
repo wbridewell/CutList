@@ -73,6 +73,7 @@ function plan(playlist: PlaylistState): ResolvedCuratorRequestPlan {
     replacementCount: 1,
     instructionIntentStatus: "success",
     effectiveDiscoveryRadius: "moderate",
+    replacementMode: "generic",
     constraintState: {
       deterministicConstraints: {},
       deterministicPersistentConstraints: {},
@@ -96,6 +97,8 @@ function plan(playlist: PlaylistState): ResolvedCuratorRequestPlan {
       removedTracks: [],
       versionCleanup: null
     },
+    addPlacement: null,
+    replacementTarget: null,
     steps: [],
     debugNotes: []
   };
@@ -218,5 +221,182 @@ describe("executeCandidateGeneration", () => {
       action: "set",
       tracks: [addedA, addedB]
     });
+  });
+
+  it("puts a replacement back where the removed track was", () => {
+    const opener = track({ id: "manual:opener", title: "March of the Pigs", artist: "Nine Inch Nails" });
+    const removed = track({ id: "manual:removed", title: "Blue Monday", artist: "New Order" });
+    const closer = track({ id: "manual:closer", title: "Roads", artist: "Portishead" });
+    const replacement = track({ id: "manual:new", title: "Army of Me", artist: "Bjork" });
+    const playlist: PlaylistState = {
+      id: "playlist",
+      title: "Test",
+      mood: null,
+      arc: null,
+      tracks: [opener, removed, closer],
+      constraints: {},
+      discoveryRadius: "moderate",
+      conversationSummary: null,
+      updatedAt: "2026-06-23T00:00:00Z"
+    };
+
+    const response = composeGenerationResponse(
+      plan(playlist),
+      {
+        acceptedTracks: [replacement],
+        rejectedCandidates: [],
+        playlistMeta: null,
+        activeConstraints: {},
+        batchMessages: []
+      },
+      {
+        baseTracks: [opener, closer],
+        effectiveRequestedCount: 1,
+        preGenerationRemovedTracks: [removed]
+      }
+    );
+
+    expect(response.playlistUpdate).toMatchObject({ action: "set" });
+    expect(response.playlistUpdate?.tracks.map((track) => track.title)).toEqual([
+      "March of the Pigs",
+      "Army of Me",
+      "Roads"
+    ]);
+  });
+
+  it("returns a set update for add requests that specify relative placement", () => {
+    const firestarter = track({ id: "firestarter", title: "Firestarter", artist: "The Prodigy" });
+    const roads = track({ id: "roads", title: "Roads", artist: "Portishead" });
+    const bridge = track({ id: "army-of-me", title: "Army of Me", artist: "Bjork" });
+    const playlist: PlaylistState = {
+      id: "playlist",
+      title: "Test",
+      mood: null,
+      arc: null,
+      tracks: [firestarter, roads],
+      constraints: {},
+      discoveryRadius: "moderate",
+      conversationSummary: null,
+      updatedAt: "2026-06-23T00:00:00Z"
+    };
+
+    const response = composeGenerationResponse(
+      {
+        ...plan(playlist),
+        userMessage: "Add Army of Me after Firestarter.",
+        operation: "generate",
+        normalizedIntent: { ...plan(playlist).normalizedIntent, operationType: "add" },
+        addPlacement: {
+          mode: "after_track",
+          anchorQuery: "Firestarter",
+          anchorTrackId: "firestarter",
+          anchorLabel: "The Prodigy - Firestarter",
+          resolution: "exact"
+        }
+      },
+      {
+        acceptedTracks: [bridge],
+        rejectedCandidates: [],
+        playlistMeta: null,
+        activeConstraints: {},
+        batchMessages: ["Adding the kinetic shock absorber."]
+      },
+      {
+        baseTracks: [firestarter, roads],
+        effectiveRequestedCount: 1,
+        preGenerationRemovedTracks: []
+      }
+    );
+
+    expect(response.message).toContain("Placed 1 added track after The Prodigy - Firestarter.");
+    expect(response.playlistUpdate).toMatchObject({
+      action: "set"
+    });
+    expect(response.playlistUpdate?.tracks.map((track) => track.title)).toEqual(["Firestarter", "Army of Me", "Roads"]);
+  });
+
+  it("verifies canonical replacements against the same song instead of generating broad replacements", async () => {
+    const existing = track({
+      id: "blue-monday-old",
+      title: "Blue Monday",
+      artist: "New Order",
+      album: "iTunes Originals",
+      source: "itunes",
+      sourceId: "old"
+    });
+    const canonical = track({
+      id: "blue-monday-new",
+      title: "Blue Monday",
+      artist: "New Order",
+      album: "Power, Corruption & Lies",
+      source: "musicbrainz",
+      sourceId: "new"
+    });
+    const playlist: PlaylistState = {
+      id: "playlist",
+      title: "Test",
+      mood: null,
+      arc: null,
+      tracks: [existing],
+      constraints: {},
+      discoveryRadius: "moderate",
+      conversationSummary: null,
+      updatedAt: "2026-06-23T00:00:00Z"
+    };
+
+    vi.mocked(verifyTrack).mockResolvedValueOnce({
+      status: "verified",
+      track: canonical
+    });
+
+    const result = await executeCandidateGeneration(
+      {
+        ...plan(playlist),
+        userMessage: "replace this iTunes Original version of Blue Monday with the canonical track",
+        replacementMode: "canonical_version",
+        replacementTarget: {
+          query: "Blue Monday",
+          trackId: "blue-monday-old",
+          title: "Blue Monday",
+          artist: "New Order",
+          resolution: "exact"
+        }
+      },
+      {},
+      {
+        baseTracks: [],
+        replacementRemovedTracks: [existing],
+        effectiveRequestedCount: 1
+      }
+    );
+
+    if ("playlistUpdate" in result) {
+      throw new Error("Expected candidate execution result, got final curator response.");
+    }
+
+    expect(vi.mocked(verifyTrack)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(verifyTrack).mock.calls[0]).toMatchObject([
+      {
+        title: "Blue Monday",
+        artist: "New Order"
+      },
+      {
+        title: "Blue Monday",
+        artist: "New Order",
+        album: null,
+        reason: "Canonical version replacement.",
+        vibeTags: [],
+        expectedFitNotes: "",
+        energy: null
+      },
+      undefined,
+      {
+        excludeSourceIdentity: {
+          source: "itunes",
+          sourceId: "old"
+        }
+      }
+    ]);
+    expect(result.acceptedTracks).toEqual([canonical]);
   });
 });

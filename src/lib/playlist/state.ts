@@ -67,6 +67,32 @@ export function insertTracksAfterTrack(
   };
 }
 
+export function insertTracksBeforeTrack(
+  playlist: PlaylistState,
+  beforeTrackId: string,
+  tracks: Track[],
+  updatedAt = nowIso()
+): PlaylistState {
+  if (tracks.length === 0) {
+    return playlist;
+  }
+
+  const index = playlist.tracks.findIndex((track) => track.id === beforeTrackId);
+  if (index < 0) {
+    return addTracksToPlaylist(playlist, tracks, updatedAt);
+  }
+
+  return {
+    ...playlist,
+    tracks: [
+      ...playlist.tracks.slice(0, index),
+      ...tracks,
+      ...playlist.tracks.slice(index)
+    ],
+    updatedAt
+  };
+}
+
 export function removeTrackFromPlaylist(playlist: PlaylistState, trackId: string, updatedAt = nowIso()): PlaylistState {
   return {
     ...playlist,

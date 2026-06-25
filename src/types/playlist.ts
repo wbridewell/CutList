@@ -4,6 +4,7 @@ import {
   AnalyzePlaylistResponseSchema,
   AttemptedMatchSchema,
   BoundNamedTrackSchema,
+  BoundTrackPlacementSchema,
   CandidateTrackSchema,
   ConstraintFindingSchema,
   ConstraintCoverageFieldReportSchema,
@@ -14,6 +15,7 @@ import {
   CuratorProgressEventSchema,
   CuratorResponseSchema,
   CuratorStreamEventSchema,
+  DeclaredTrackPlacementSchema,
   DiscoveryRadiusSchema,
   ExportRequestSchema,
   ExportResponseSchema,
@@ -39,6 +41,7 @@ import {
   OperatorPlanNodeSchema,
   OperatorPlanTemplateSchema,
   RejectedCandidateSchema,
+  ReplacementModeSchema,
   ResolvedOperatorPlanSchema,
   ResolvedUserRequestPlanSchema,
   ReviewConfidenceSchema,
@@ -51,6 +54,7 @@ import {
   SuppressedCandidateReasonCodeSchema,
   SuggestionBatchSchema,
   TrackSchema,
+  TrackPlacementModeSchema,
   TrackRoleAssessmentSchema,
   TransitionAssessmentSchema,
   TransitionIssueTypeSchema,
@@ -126,6 +130,10 @@ export type OperatorKind = z.infer<typeof OperatorKindSchema>;
 export type OperatorPlanTemplate = z.infer<typeof OperatorPlanTemplateSchema>;
 export type OperatorPlanNode = z.infer<typeof OperatorPlanNodeSchema>;
 export type BoundNamedTrack = z.infer<typeof BoundNamedTrackSchema>;
+export type ReplacementMode = z.infer<typeof ReplacementModeSchema>;
+export type TrackPlacementMode = z.infer<typeof TrackPlacementModeSchema>;
+export type DeclaredTrackPlacement = z.infer<typeof DeclaredTrackPlacementSchema>;
+export type BoundTrackPlacement = z.infer<typeof BoundTrackPlacementSchema>;
 export type OperatorDeclaredEntities = z.infer<typeof OperatorDeclaredEntitiesSchema>;
 export type OperatorParameterHints = z.infer<typeof OperatorParameterHintsSchema>;
 export type OperatorBoundEntities = z.infer<typeof OperatorBoundEntitiesSchema>;

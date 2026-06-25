@@ -232,6 +232,10 @@ export function ChatPanel({
     setReviewUndoPayload(null);
   }
 
+  function reusePrompt(prompt: string) {
+    setUserMessage(prompt);
+  }
+
   function applyReviewState(review: AnalyzePlaylistResponse, reviewEntryId: string | null = null) {
     setActiveReview(review);
     setActiveReviewEntryId(reviewEntryId);
@@ -356,7 +360,8 @@ export function ChatPanel({
   }, []);
 
   function acceptMatch(match: AttemptedMatch, context: { entryId: string; issueId: string }) {
-    const result = acceptManualMatchWorkflow(playlist, match);
+    const historyEntry = history.find((entry) => entry.id === context.entryId) ?? null;
+    const result = acceptManualMatchWorkflow(playlist, match, { historyEntry });
     if (result.historyEntry) {
       onHistoryChange((currentHistory) => currentHistory.map((entry) => {
         if (entry.id !== context.entryId) {
@@ -744,6 +749,7 @@ export function ChatPanel({
                 busy={busy}
                 curatorUndoDescription={curatorTurnUndoState ? "Restore the playlist state from before the most recent curator-applied turn." : null}
                 messages={messages}
+                onReusePrompt={reusePrompt}
                 onUndoCuratorTurn={curatorTurnUndoState ? undoLastCuratorTurn : undefined}
                 progressStatus={progressStatus}
               />
@@ -785,6 +791,7 @@ export function ChatPanel({
             autoOpenIssuesRef.current = false;
           }}
           onReloadWorkspace={onReloadWorkspace}
+          onReusePrompt={reusePrompt}
           onReviewCompression={(suggestion) => void reviewCompressedPlaylist(suggestion)}
           onSaveSession={onSaveSession}
           onSeedTextChange={setSeedText}

@@ -796,6 +796,12 @@
   flex-shrink: 0;
 }
 
+.replay-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.5rem;
+}
+
 .timeline-head h3 {
   color: #ffe0a6;
   margin-bottom: 0.25rem;

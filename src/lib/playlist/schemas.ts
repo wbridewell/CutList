@@ -370,6 +370,7 @@ export const UserRequestOperationPlanKindSchema = z.enum([
   "import_only",
   "conversational_only"
 ]);
+export const ReplacementModeSchema = z.enum(["generic", "canonical_version"]);
 export const UserRequestRoutingNoteSchema = z.enum([
   "explicit_non_modification_directive",
   "review_button_forces_read_only",
@@ -563,9 +564,23 @@ export const OperatorDeclaredTransitionSchema = z.object({
   toText: z.string().min(1)
 });
 
+export const TrackPlacementModeSchema = z.enum([
+  "append",
+  "prepend",
+  "after_track",
+  "before_track"
+]);
+
+export const DeclaredTrackPlacementSchema = z.object({
+  mode: TrackPlacementModeSchema,
+  anchorQuery: z.string().nullable().default(null)
+});
+
 export const OperatorDeclaredEntitiesSchema = z.object({
   namedTracks: z.array(z.string().min(1)).default([]),
   transition: OperatorDeclaredTransitionSchema.nullable().default(null),
+  placement: DeclaredTrackPlacementSchema.nullable().default(null),
+  replacementTarget: z.string().nullable().default(null),
   targetSpan: z.string().nullable().default(null)
 });
 
@@ -643,9 +658,19 @@ export const BoundNamedTransitionSchema = z.object({
   resolution: z.enum(["exact", "fuzzy", "ambiguous", "unresolved"]).default("unresolved")
 });
 
+export const BoundTrackPlacementSchema = z.object({
+  mode: TrackPlacementModeSchema,
+  anchorQuery: z.string().nullable().default(null),
+  anchorTrackId: z.string().nullable().default(null),
+  anchorLabel: z.string().nullable().default(null),
+  resolution: z.enum(["not_needed", "exact", "fuzzy", "ambiguous", "unresolved"]).default("not_needed")
+});
+
 export const OperatorBoundEntitiesSchema = z.object({
   namedTracks: z.array(BoundNamedTrackSchema).default([]),
   namedTransition: BoundNamedTransitionSchema.nullable().default(null),
+  placement: BoundTrackPlacementSchema.nullable().default(null),
+  replacementTarget: BoundNamedTrackSchema.nullable().default(null),
   targetSpan: z.string().nullable().default(null),
   candidateCount: z.number().int().positive().max(20).nullable().default(null),
   maxTrackDurationMs: z.number().int().positive().nullable().default(null),
@@ -658,6 +683,7 @@ export const ResolvedOperatorPlanSchema = z.object({
   routeFamily: UserRequestRouteFamilySchema,
   executionPolicy: UserRequestExecutionPolicySchema,
   planTemplate: OperatorPlanTemplateSchema,
+  replacementMode: ReplacementModeSchema.default("generic"),
   reviewMode: ReviewModeSchema.nullable().default(null),
   operators: z.array(OperatorPlanNodeSchema).default([]),
   normalizedIntent: NormalizedInstructionIntentSchema,

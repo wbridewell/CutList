@@ -84,6 +84,7 @@ describe("curator LLM boundaries", () => {
         routeFamily: isPastedTrackList ? "import" : isConversational ? "conversational" : "curator",
         executionPolicy: isPastedTrackList || isConversational ? "read_only" : "mutating",
         planTemplate: isPastedTrackList ? "import_request" : isConversational ? "conversational_reply" : "curator_mutation",
+        replacementMode: "generic",
         reviewMode: null,
         operators: [{ kind: "summarize_for_user" }],
         normalizedIntent: {
@@ -107,6 +108,8 @@ describe("curator LLM boundaries", () => {
         boundEntities: {
           namedTracks: [],
           namedTransition: null,
+          placement: null,
+          replacementTarget: null,
           targetSpan: null,
           candidateCount: null,
           maxTrackDurationMs: null,
@@ -114,7 +117,7 @@ describe("curator LLM boundaries", () => {
           preserve: [],
           avoid: []
         },
-        declaredEntities: { namedTracks: [], transition: null, targetSpan: null },
+        declaredEntities: { namedTracks: [], transition: null, placement: null, replacementTarget: null, targetSpan: null },
         parameterHints: {
           requestedCount: null,
           targetTotalTrackCount: null,
@@ -183,7 +186,7 @@ describe("curator LLM boundaries", () => {
     expect(verifyTracks).not.toHaveBeenCalled();
     expect(result.message).toContain("removed 1 alternate version");
     expect(result.playlistUpdate?.action).toBe("set");
-    expect(result.playlistUpdate?.tracks.map((track) => track.title)).toEqual(["Schism", "Forty Six & 2", "Sober", "Aenema"]);
+    expect(result.playlistUpdate?.tracks.map((track) => track.title)).toEqual(["Forty Six & 2", "Schism", "Sober", "Aenema"]);
   });
 
   it("does not treat comma-separated starter prompt prose as pasted tracks", async () => {
@@ -271,7 +274,7 @@ describe("curator LLM boundaries", () => {
     expect(result.updatedConstraints?.allowExplicit).toBe(false);
     expect(result.message).toContain("I verified and accepted 1 track toward the requested 1.");
     expect(result.playlistUpdate?.action).toBe("set");
-    expect(result.playlistUpdate?.tracks.map((track) => track.title)).toEqual(["Cold Open", "Resolve", "Warm Lift"]);
+    expect(result.playlistUpdate?.tracks.map((track) => track.title)).toEqual(["Cold Open", "Warm Lift", "Resolve"]);
   });
 
   it("falls back to deterministic weakest-track replacement when removal selection returns no valid ids", async () => {
@@ -339,9 +342,138 @@ describe("curator LLM boundaries", () => {
     );
 
     expect(result.playlistUpdate?.action).toBe("set");
-    expect(result.playlistUpdate?.tracks.map((track) => track.title)).toEqual(["March Forward", "Machine Sleep", "Metal Crash"]);
+    expect(result.playlistUpdate?.tracks.map((track) => track.title)).toEqual(["March Forward", "Metal Crash", "Machine Sleep"]);
     expect(result.playlistUpdate?.tracks.map((track) => track.id)).not.toContain("track-2");
     expect(result.message).toContain("I verified and accepted 1 track toward the requested 1.");
+  });
+
+  it("treats canonical version replacement as same-song normalization and preserves the slot", async () => {
+    vi.mocked(getLLMProvider).mockReturnValue("ollama");
+    const opener = acceptedTrack("track-1", "March of the Pigs", "Nine Inch Nails");
+    const blueMonday = {
+      ...acceptedTrack("track-2", "Blue Monday", "New Order"),
+      album: "iTunes Originals",
+      source: "itunes" as const
+    };
+    const closer = acceptedTrack("track-3", "Roads", "Portishead");
+    vi.mocked(resolveOperatorPlan).mockResolvedValueOnce({
+      routeFamily: "curator",
+      executionPolicy: "mutating",
+      planTemplate: "curator_mutation",
+      replacementMode: "canonical_version",
+      reviewMode: null,
+      operators: [{ kind: "summarize_for_user" }],
+      normalizedIntent: {
+        operationType: "replace",
+        operationConfidence: "high",
+        requestedAddCount: null,
+        targetTotalTrackCount: null,
+        replacementCount: 1,
+        verifiedRules: {},
+        curatorGuidance: {},
+        persistentVerifiedRules: {},
+        persistentGuidance: {},
+        requestScopedVerifiedRules: {},
+        requestScopedGuidance: {},
+        persistentConstraints: {},
+        requestScopedConstraints: {},
+        activeConstraints: {},
+        notes: [],
+        raw: null
+      },
+      boundEntities: {
+        namedTracks: [],
+        namedTransition: null,
+        placement: null,
+        replacementTarget: {
+          query: "Blue Monday",
+          trackId: "track-2",
+          title: "Blue Monday",
+          artist: "New Order",
+          resolution: "exact"
+        },
+        targetSpan: null,
+        candidateCount: null,
+        maxTrackDurationMs: null,
+        avoidArtistRepeats: false,
+        preserve: [],
+        avoid: []
+      },
+      declaredEntities: {
+        namedTracks: [],
+        transition: null,
+        placement: null,
+        replacementTarget: "Blue Monday",
+        targetSpan: null
+      },
+      parameterHints: {
+        requestedCount: null,
+        targetTotalTrackCount: null,
+        replacementCount: 1,
+        maxTrackDurationMs: null,
+        avoidArtistRepeats: false,
+        preserve: [],
+        avoid: []
+      },
+      deterministicSignals: {
+        hasReviewSignals: false,
+        hasCuratorSignals: true,
+        hasNonModificationDirective: false,
+        hasPastedTracks: false,
+        hasMixedIntent: false,
+        trackCount: 3,
+        addition: false,
+        removal: false,
+        replacement: true,
+        shapeStrength: "none"
+      },
+      confidence: "high",
+      planningNotes: ["Test planner stub."],
+      instructionIntentStatus: "not_attempted"
+    });
+    vi.mocked(getJsonFromLLM).mockResolvedValueOnce({
+      operationIntent: {
+        type: "replace",
+        requestedTrackCount: null,
+        targetTotalTrackCount: null,
+        replaceCount: 1,
+        confidence: "high"
+      },
+      verifiedRules: {},
+      curatorGuidance: {},
+      scopeIntent: {
+        persistentVerifiedRuleFields: [],
+        persistentGuidanceFields: [],
+        requestScopedVerifiedRuleFields: [],
+        requestScopedGuidanceFields: []
+      },
+      notes: ["Normalize this to the canonical version."]
+    });
+    vi.mocked(verifyTrack).mockResolvedValueOnce({
+      status: "verified",
+      track: {
+        ...acceptedTrack("canonical-blue-monday", "Blue Monday", "New Order"),
+        album: "Power, Corruption & Lies",
+        source: "musicbrainz",
+        sourceId: "canonical-blue-monday"
+      }
+    });
+
+    const result = await handlePlaylistMessage(
+      { ...playlist, tracks: [opener, blueMonday, closer] },
+      "replace this iTunes Original version of Blue Monday with the canonical track"
+    );
+
+    expect(getJsonFromLLM).toHaveBeenCalledTimes(1);
+    expect(verifyTrack).toHaveBeenCalledTimes(1);
+    expect(result.message).not.toContain("Placed");
+    expect(result.playlistUpdate?.action).toBe("set");
+    expect(result.playlistUpdate?.tracks.map((track) => `${track.artist} - ${track.title}`)).toEqual([
+      "Nine Inch Nails - March of the Pigs",
+      "New Order - Blue Monday",
+      "Portishead - Roads"
+    ]);
+    expect(result.playlistUpdate?.tracks[1]?.album).toBe("Power, Corruption & Lies");
   });
 
   it("applies pure covers-only rule updates without generating tracks", async () => {
@@ -1324,8 +1456,8 @@ describe("curator LLM boundaries", () => {
     expect(result.playlistUpdate?.action).toBe("set");
     expect(result.playlistUpdate?.tracks.map((track) => `${track.artist}:${track.title}`)).toEqual([
       "A:Keeper",
-      "B:Other",
       "C:New One",
+      "B:Other",
       "D:New Two"
     ]);
     expect(result.constraintReport.passed).toBe(true);

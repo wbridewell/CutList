@@ -11,7 +11,16 @@ import type { AttemptedMatch, RejectedCandidate, ReviewSuggestion } from "@/type
 
 type Props = {
   history: RequestHistoryEntry[];
+  onReusePrompt?: (prompt: string) => void;
 };
+
+function canReuseHistoryPrompt(entry: RequestHistoryEntry): boolean {
+  return entry.userMessage.trim().length > 0 && (
+    entry.kind === "request" ||
+    entry.kind === "review" ||
+    entry.kind === "error"
+  );
+}
 
 function attemptedMatchKey(match: AttemptedMatch, index: number): string {
   return [
@@ -141,7 +150,7 @@ function reviewSuggestionHistoryLabel(entry: RequestHistoryEntry, suggestion: Re
   }
 }
 
-export function ConversationTimeline({ history }: Props) {
+export function ConversationTimeline({ history, onReusePrompt }: Props) {
   const timeline = sortedConversationHistory(history);
 
   return (
@@ -156,7 +165,16 @@ export function ConversationTimeline({ history }: Props) {
                 <div>
                   <h3>{entryTitle(entry)}</h3>
                 </div>
-                <time className="muted" dateTime={entry.createdAt}>{new Date(entry.createdAt).toLocaleTimeString()}</time>
+                <div>
+                  <time className="muted" dateTime={entry.createdAt}>{new Date(entry.createdAt).toLocaleTimeString()}</time>
+                  {onReusePrompt && canReuseHistoryPrompt(entry) ? (
+                    <div className="replay-actions">
+                      <button className="button-secondary button-compact" type="button" onClick={() => onReusePrompt(entry.userMessage)}>
+                        Reuse prompt
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
               </div>
               <div className="stats">
                 {entry.playlistAction === "reorder" ? (

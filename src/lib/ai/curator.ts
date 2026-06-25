@@ -115,7 +115,10 @@ export async function handlePlaylistMessage(
   options.onProgress?.({ stage: "parsing", message: "Understanding your request and active rules." });
   let plan;
   try {
-    plan = await resolveCuratorRequestPlan(playlist, userMessage, options);
+    plan = await resolveCuratorRequestPlan(playlist, userMessage, {
+      ...options,
+      operatorPlan
+    });
   } catch (error) {
     logCuratorDebugError("request_resolution", error);
     if (

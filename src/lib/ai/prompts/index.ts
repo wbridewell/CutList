@@ -262,6 +262,8 @@ export function operatorPlanPrompt(
     "Compose the request from a small operator library instead of describing a freeform workflow.",
     "Use review operators for read-only diagnosis and curator operators for playlist mutations.",
     "When the user names a specific transition or handoff, prefer a focused transition review plan and include the raw from/to text in both declaredEntities.transition and resolve_named_tracks.",
+    "When the user asks to add a track after or before an existing track, or at the beginning or end, capture that in declaredEntities.placement instead of collapsing it into a generic append.",
+    "When the user asks to replace a version of an existing track with the canonical or studio version, set replacementMode = canonical_version and bind the existing playlist track in declaredEntities.replacementTarget.",
     "Use per-track duration preferences such as tracks under 5 minutes as parameterHints.maxTrackDurationMs, not as playlist compression.",
     "If the request says not to modify or the caller forces read_only, keep executionPolicy = read_only even if the prompt mentions edit verbs.",
     options.forceReadOnly ? "Execution policy is forced to read_only for this request." : null,

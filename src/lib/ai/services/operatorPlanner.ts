@@ -3,24 +3,21 @@ import { operatorPlanPrompt } from "@/lib/ai/prompts";
 import { normalizeInstructionIntentLayers, parseInstructionIntentDetailed, parseRequestedTrackCount } from "@/lib/ai/services/instructionIntent";
 import { parseDeterministicRequest } from "@/lib/ai/services/deterministicRequestParser";
 import { parseTrackRowsFromText } from "@/lib/playlist/io/textImport";
+import { bindDeclaredTrackPlacement, detectCanonicalReplacementTargetQuery, detectDeclaredTrackPlacement, resolveNamedTrack } from "@/lib/playlist/requestPlacement";
 import { hasCuratorSignals, hasNonModificationDirective, hasReviewSignals } from "@/lib/playlist/requestRouting";
 import { determineReviewModeDeterministically } from "@/lib/ai/services/reviewMode";
 import type { CuratorRunOptions } from "@/lib/ai/curatorTypes";
 import type {
-  BoundNamedTrack,
   OperatorBoundEntities,
   OperatorDeclaredEntities,
   OperatorParameterHints,
   OperatorPlanNode,
   PlaylistState,
+  ReplacementMode,
   ResolvedOperatorPlan,
   ReviewMode,
   UserRequestDeterministicSignals
 } from "@/types/playlist";
-
-function normalizeText(value: string): string {
-  return value.trim().toLowerCase().replace(/["'.:,!?()[\]-]+/g, " ").replace(/\s+/g, " ").trim();
-}
 
 function parseTrackLevelDurationLimitMs(userMessage: string): number | null {
   const match = userMessage.match(/\b(?:tracks?|songs?)\b.{0,20}\b(?:under|below|at most|no longer than)\b.{0,10}(\d+)\s*(?:min|minutes?)\b/i)
@@ -81,6 +78,15 @@ function inferReviewModeFromTemplate(planTemplate: ResolvedOperatorPlan["planTem
     default:
       return null;
   }
+}
+
+function detectReplacementMode(userMessage: string, deterministicSignals: UserRequestDeterministicSignals): ReplacementMode {
+  if (!deterministicSignals.replacement) {
+    return "generic";
+  }
+  return /\b(?:canonical|proper|real|original|studio)\b/i.test(userMessage) || /\bitunes originals?\b/i.test(userMessage)
+    ? "canonical_version"
+    : "generic";
 }
 
 function defaultOperatorsForTemplate(
@@ -162,7 +168,7 @@ function buildDeterministicSignals(playlist: PlaylistState, userMessage: string)
   };
 }
 
-function fallbackReadOnlyReviewPlan(userMessage: string, parameterHints: OperatorParameterHints): Pick<ResolvedOperatorPlan, "routeFamily" | "executionPolicy" | "planTemplate" | "reviewMode" | "operators" | "declaredEntities" | "parameterHints" | "confidence" | "planningNotes"> {
+function fallbackReadOnlyReviewPlan(userMessage: string, parameterHints: OperatorParameterHints): Pick<ResolvedOperatorPlan, "routeFamily" | "executionPolicy" | "planTemplate" | "replacementMode" | "reviewMode" | "operators" | "declaredEntities" | "parameterHints" | "confidence" | "planningNotes"> {
   const transitionMatch = extractNamedTransition(userMessage);
   const reviewMode = determineReviewModeDeterministically(userMessage);
   if (transitionMatch) {
@@ -172,12 +178,15 @@ function fallbackReadOnlyReviewPlan(userMessage: string, parameterHints: Operato
         fromText: transitionMatch.fromText,
         toText: transitionMatch.toText
       },
+      placement: null,
+      replacementTarget: null,
       targetSpan: null
     } satisfies OperatorDeclaredEntities;
     return {
       routeFamily: "review",
       executionPolicy: "read_only",
       planTemplate: "focused_transition_review",
+      replacementMode: "generic",
       reviewMode: "focused_transition_repair",
       operators: defaultOperatorsForTemplate("focused_transition_review", declaredEntities, parameterHints),
       declaredEntities,
@@ -204,6 +213,7 @@ function fallbackReadOnlyReviewPlan(userMessage: string, parameterHints: Operato
     routeFamily: "review",
     executionPolicy: "read_only",
     planTemplate: reviewTemplate,
+    replacementMode: "generic",
     reviewMode: reviewTemplate === "weak_links_review"
       ? "weak_links_only"
       : reviewTemplate === "compression_review"
@@ -216,11 +226,15 @@ function fallbackReadOnlyReviewPlan(userMessage: string, parameterHints: Operato
     operators: defaultOperatorsForTemplate(reviewTemplate, {
       namedTracks: [],
       transition: null,
+      placement: null,
+      replacementTarget: null,
       targetSpan: null
     }, parameterHints),
     declaredEntities: {
       namedTracks: [],
       transition: null,
+      placement: null,
+      replacementTarget: null,
       targetSpan: null
     },
     parameterHints,
@@ -234,16 +248,18 @@ function deterministicFallbackPlan(
   userMessage: string,
   deterministicSignals: UserRequestDeterministicSignals,
   parameterHints: OperatorParameterHints,
-  forceReadOnly: boolean
-): Pick<ResolvedOperatorPlan, "routeFamily" | "executionPolicy" | "planTemplate" | "reviewMode" | "operators" | "declaredEntities" | "parameterHints" | "confidence" | "planningNotes"> {
+  forceReadOnly: boolean,
+  placement: OperatorDeclaredEntities["placement"]
+): Pick<ResolvedOperatorPlan, "routeFamily" | "executionPolicy" | "planTemplate" | "replacementMode" | "reviewMode" | "operators" | "declaredEntities" | "parameterHints" | "confidence" | "planningNotes"> {
   if (deterministicSignals.hasPastedTracks) {
     return {
       routeFamily: "import",
       executionPolicy: "mutating",
       planTemplate: "import_request",
+      replacementMode: "generic",
       reviewMode: null,
-      operators: defaultOperatorsForTemplate("import_request", { namedTracks: [], transition: null, targetSpan: null }, parameterHints),
-      declaredEntities: { namedTracks: [], transition: null, targetSpan: null },
+      operators: defaultOperatorsForTemplate("import_request", { namedTracks: [], transition: null, placement: null, replacementTarget: null, targetSpan: null }, parameterHints),
+      declaredEntities: { namedTracks: [], transition: null, placement: null, replacementTarget: null, targetSpan: null },
       parameterHints,
       confidence: "high",
       planningNotes: ["Deterministic import fallback."]
@@ -257,9 +273,10 @@ function deterministicFallbackPlan(
       routeFamily: "curator",
       executionPolicy: "mutating",
       planTemplate: "curator_mutation",
+      replacementMode: "generic",
       reviewMode: null,
       operators: [{ kind: "summarize_for_user" }],
-      declaredEntities: { namedTracks: [], transition: null, targetSpan: null },
+      declaredEntities: { namedTracks: [], transition: null, placement, replacementTarget: null, targetSpan: null },
       parameterHints,
       confidence: "medium",
       planningNotes: ["Empty-playlist fallback routes to curator mutation."]
@@ -272,9 +289,10 @@ function deterministicFallbackPlan(
     routeFamily: "curator",
     executionPolicy: "mutating",
     planTemplate: "curator_mutation",
+    replacementMode: "generic",
     reviewMode: null,
     operators: [{ kind: "summarize_for_user" }],
-    declaredEntities: { namedTracks: [], transition: null, targetSpan: null },
+    declaredEntities: { namedTracks: [], transition: null, placement, replacementTarget: null, targetSpan: null },
     parameterHints,
     confidence: "medium",
     planningNotes: ["Deterministic curator fallback."]
@@ -294,8 +312,11 @@ function shouldOverrideReviewPlanToCurator(
 
 function operatorPlanFromInstructionIntent(
   intent: Awaited<ReturnType<typeof parseInstructionIntentDetailed>>["intent"],
-  parameterHints: OperatorParameterHints
-): Pick<ResolvedOperatorPlan, "routeFamily" | "executionPolicy" | "planTemplate" | "reviewMode" | "operators" | "declaredEntities" | "parameterHints" | "confidence" | "planningNotes"> | null {
+  parameterHints: OperatorParameterHints,
+  placement: OperatorDeclaredEntities["placement"],
+  replacementMode: ReplacementMode,
+  replacementTarget: OperatorDeclaredEntities["replacementTarget"]
+): Pick<ResolvedOperatorPlan, "routeFamily" | "executionPolicy" | "planTemplate" | "replacementMode" | "reviewMode" | "operators" | "declaredEntities" | "parameterHints" | "confidence" | "planningNotes"> | null {
   const routingIntent = intent?.routingIntent;
   if (!routingIntent) {
     return null;
@@ -324,64 +345,13 @@ function operatorPlanFromInstructionIntent(
     routeFamily: routingIntent.routeFamily,
     executionPolicy: routingIntent.allowMutation ? "mutating" : "read_only",
     planTemplate,
+    replacementMode,
     reviewMode,
-    operators: defaultOperatorsForTemplate(planTemplate, { namedTracks: [], transition: null, targetSpan: null }, parameterHints),
-    declaredEntities: { namedTracks: [], transition: null, targetSpan: null },
+    operators: defaultOperatorsForTemplate(planTemplate, { namedTracks: [], transition: null, placement, replacementTarget, targetSpan: null }, parameterHints),
+    declaredEntities: { namedTracks: [], transition: null, placement, replacementTarget, targetSpan: null },
     parameterHints,
     confidence: intent?.operationIntent.confidence ?? "medium",
     planningNotes: ["Instruction-intent router fallback."]
-  };
-}
-
-function resolveNamedTrack(playlist: PlaylistState, query: string): BoundNamedTrack {
-  const normalizedQuery = normalizeText(query);
-  const exactMatches = playlist.tracks.filter((track) => {
-    const title = normalizeText(track.title);
-    const artist = normalizeText(track.artist);
-    const combo = normalizeText(`${track.artist} ${track.title}`);
-    const dashed = normalizeText(`${track.artist} - ${track.title}`);
-    return normalizedQuery === title || normalizedQuery === combo || normalizedQuery === dashed || normalizedQuery === artist;
-  });
-  if (exactMatches.length === 1) {
-    const track = exactMatches[0];
-    return {
-      query,
-      trackId: track.id,
-      title: track.title,
-      artist: track.artist,
-      resolution: "exact"
-    };
-  }
-  const queryTokens = normalizedQuery.split(" ").filter(Boolean);
-  const fuzzyMatches = playlist.tracks.filter((track) => {
-    const haystack = normalizeText(`${track.artist} ${track.title}`);
-    return queryTokens.every((token) => haystack.includes(token));
-  });
-  if (fuzzyMatches.length === 1) {
-    const track = fuzzyMatches[0];
-    return {
-      query,
-      trackId: track.id,
-      title: track.title,
-      artist: track.artist,
-      resolution: "fuzzy"
-    };
-  }
-  if (exactMatches.length > 1 || fuzzyMatches.length > 1) {
-    return {
-      query,
-      trackId: null,
-      title: null,
-      artist: null,
-      resolution: "ambiguous"
-    };
-  }
-  return {
-    query,
-    trackId: null,
-    title: null,
-    artist: null,
-    resolution: "unresolved"
   };
 }
 
@@ -413,9 +383,15 @@ function bindEntities(
       } as OperatorBoundEntities["namedTransition"];
     })()
     : null;
+  const placement = bindDeclaredTrackPlacement(playlist, declaredEntities.placement);
+  const replacementTarget = declaredEntities.replacementTarget
+    ? resolveNamedTrack(playlist, declaredEntities.replacementTarget)
+    : null;
   return {
     namedTracks,
     namedTransition,
+    placement,
+    replacementTarget,
     targetSpan: declaredEntities.targetSpan,
     candidateCount: parameterHints.requestedCount,
     maxTrackDurationMs: parameterHints.maxTrackDurationMs,
@@ -428,8 +404,8 @@ function bindEntities(
 function validateOperators(
   userMessage: string,
   forceReadOnly: boolean,
-  plan: Pick<ResolvedOperatorPlan, "routeFamily" | "executionPolicy" | "planTemplate" | "reviewMode" | "operators" | "declaredEntities" | "parameterHints" | "confidence" | "planningNotes">
-): Pick<ResolvedOperatorPlan, "routeFamily" | "executionPolicy" | "planTemplate" | "reviewMode" | "operators" | "declaredEntities" | "parameterHints" | "confidence" | "planningNotes"> {
+  plan: Pick<ResolvedOperatorPlan, "routeFamily" | "executionPolicy" | "planTemplate" | "replacementMode" | "reviewMode" | "operators" | "declaredEntities" | "parameterHints" | "confidence" | "planningNotes">
+): Pick<ResolvedOperatorPlan, "routeFamily" | "executionPolicy" | "planTemplate" | "replacementMode" | "reviewMode" | "operators" | "declaredEntities" | "parameterHints" | "confidence" | "planningNotes"> {
   const reviewMode = plan.reviewMode ?? inferReviewModeFromTemplate(plan.planTemplate);
   const operators = plan.operators.length > 0
     ? plan.operators
@@ -465,6 +441,13 @@ export async function resolveOperatorPlan(
 ): Promise<ResolvedOperatorPlan> {
   const deterministicSignals = buildDeterministicSignals(playlist, userMessage);
   const explicitReadOnly = options.forceReadOnly || deterministicSignals.hasNonModificationDirective;
+  const replacementMode = detectReplacementMode(userMessage, deterministicSignals);
+  const detectedPlacement = replacementMode === "generic" && !deterministicSignals.replacement
+    ? detectDeclaredTrackPlacement(userMessage)
+    : null;
+  const replacementTarget = replacementMode === "canonical_version"
+    ? detectCanonicalReplacementTargetQuery(playlist, userMessage)
+    : null;
   const parameterHints: OperatorParameterHints = {
     requestedCount: parseRequestedTrackCount(userMessage),
     targetTotalTrackCount: null,
@@ -476,11 +459,12 @@ export async function resolveOperatorPlan(
   };
 
   if (deterministicSignals.hasPastedTracks) {
-    const fallback = deterministicFallbackPlan(playlist, userMessage, deterministicSignals, parameterHints, explicitReadOnly);
+    const fallback = deterministicFallbackPlan(playlist, userMessage, deterministicSignals, parameterHints, explicitReadOnly, detectedPlacement);
     return {
       routeFamily: fallback.routeFamily,
       executionPolicy: fallback.executionPolicy,
       planTemplate: fallback.planTemplate,
+      replacementMode: fallback.replacementMode,
       reviewMode: fallback.reviewMode,
       operators: fallback.operators,
       normalizedIntent: normalizeInstructionIntentLayers(null),
@@ -495,11 +479,12 @@ export async function resolveOperatorPlan(
   }
 
   if (playlist.tracks.length === 0 && (deterministicSignals.hasReviewSignals || explicitReadOnly)) {
-    const fallback = deterministicFallbackPlan(playlist, userMessage, deterministicSignals, parameterHints, explicitReadOnly);
+    const fallback = deterministicFallbackPlan(playlist, userMessage, deterministicSignals, parameterHints, explicitReadOnly, detectedPlacement);
     return {
       routeFamily: fallback.routeFamily,
       executionPolicy: fallback.executionPolicy,
       planTemplate: fallback.planTemplate,
+      replacementMode: fallback.replacementMode,
       reviewMode: fallback.reviewMode,
       operators: fallback.operators,
       normalizedIntent: normalizeInstructionIntentLayers(null),
@@ -519,6 +504,7 @@ export async function resolveOperatorPlan(
       routeFamily: fallback.routeFamily,
       executionPolicy: fallback.executionPolicy,
       planTemplate: fallback.planTemplate,
+      replacementMode: fallback.replacementMode,
       reviewMode: fallback.reviewMode,
       operators: fallback.operators,
       normalizedIntent: normalizeInstructionIntentLayers(null),
@@ -539,6 +525,7 @@ export async function resolveOperatorPlan(
     routeFamily: ResolvedOperatorPlan["routeFamily"];
     executionPolicy: ResolvedOperatorPlan["executionPolicy"];
     planTemplate: ResolvedOperatorPlan["planTemplate"];
+    replacementMode: ResolvedOperatorPlan["replacementMode"];
     reviewMode: ResolvedOperatorPlan["reviewMode"];
     operators: ResolvedOperatorPlan["operators"];
     declaredEntities: OperatorDeclaredEntities;
@@ -557,10 +544,18 @@ export async function resolveOperatorPlan(
   );
 
   const candidatePlan = !attempt || attempt.status === "fallback"
-    ? operatorPlanFromInstructionIntent(intentResult.intent, parameterHints)
-      ?? deterministicFallbackPlan(playlist, userMessage, deterministicSignals, parameterHints, explicitReadOnly)
+    ? operatorPlanFromInstructionIntent(intentResult.intent, parameterHints, detectedPlacement, replacementMode, replacementTarget)
+      ?? deterministicFallbackPlan(playlist, userMessage, deterministicSignals, parameterHints, explicitReadOnly, detectedPlacement)
     : {
       ...attempt.parsed,
+      replacementMode: attempt.parsed.replacementMode ?? replacementMode,
+      declaredEntities: {
+        ...attempt.parsed.declaredEntities,
+        placement: replacementMode === "generic" && !deterministicSignals.replacement
+          ? attempt.parsed.declaredEntities.placement ?? detectedPlacement
+          : null,
+        replacementTarget: attempt.parsed.declaredEntities.replacementTarget ?? replacementTarget
+      },
       parameterHints: {
         ...attempt.parsed.parameterHints,
         requestedCount: attempt.parsed.parameterHints.requestedCount ?? parameterHints.requestedCount,
@@ -576,9 +571,10 @@ export async function resolveOperatorPlan(
       routeFamily: "curator" as const,
       executionPolicy: "mutating" as const,
       planTemplate: "curator_mutation" as const,
+      replacementMode,
       reviewMode: null,
-      operators: defaultOperatorsForTemplate("curator_mutation", { namedTracks: [], transition: null, targetSpan: null }, candidatePlan.parameterHints),
-      declaredEntities: { namedTracks: [], transition: null, targetSpan: null },
+      operators: defaultOperatorsForTemplate("curator_mutation", { namedTracks: [], transition: null, placement: detectedPlacement, replacementTarget, targetSpan: null }, candidatePlan.parameterHints),
+      declaredEntities: { namedTracks: [], transition: null, placement: detectedPlacement, replacementTarget, targetSpan: null },
       parameterHints: candidatePlan.parameterHints,
       confidence: candidatePlan.confidence,
       planningNotes: [...candidatePlan.planningNotes, "Deterministic curator override for explicit mutating request."]
@@ -592,6 +588,7 @@ export async function resolveOperatorPlan(
     routeFamily: validatedPlan.routeFamily,
     executionPolicy: validatedPlan.executionPolicy,
     planTemplate: validatedPlan.planTemplate,
+    replacementMode: validatedPlan.replacementMode,
     reviewMode: validatedPlan.reviewMode,
     operators: validatedPlan.operators,
     normalizedIntent,

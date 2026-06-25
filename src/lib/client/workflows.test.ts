@@ -418,6 +418,7 @@ describe("client workflows", () => {
     expect(result.assistantMessage.content).toContain("Not enough evidence to verify all rules:");
     expect(result.review).toBeTruthy();
     expect(result.historyEntry).toMatchObject({ kind: "review" });
+    expect(result.historyEntry?.userMessage).toBe("Review this.");
     expect(result.historyEntry?.reviewSuggestions).toEqual([]);
     expect(result.clearInput).toBe(true);
   });
@@ -773,5 +774,124 @@ describe("client workflows", () => {
     const missingSourceId = acceptManualMatchWorkflow(playlist(), { ...match, sourceId: undefined });
     expect(missingSourceId.assistantMessage.content).toContain("missing a provider id");
     expect(missingSourceId.suppressAssistantMessage).toBeUndefined();
+  });
+
+  it("puts a manually accepted replacement match back into the removed slot when history provides context", () => {
+    const before = playlist([
+      track({ id: "track-1", sourceId: "1", title: "One" }),
+      track({ id: "track-2", sourceId: "2", title: "Two" }),
+      track({ id: "track-3", sourceId: "3", title: "Three" })
+    ]);
+    const current = {
+      ...before,
+      tracks: [before.tracks[0], before.tracks[2]]
+    };
+    const match: AttemptedMatch = {
+      artist: "Manual Artist",
+      title: "Manual Song",
+      album: null,
+      durationMs: 200000,
+      runtime: "3:20",
+      source: "musicbrainz",
+      sourceId: "mbid",
+      confidence: "medium",
+      score: 0.78
+    };
+
+    const accepted = acceptManualMatchWorkflow(current, match, {
+      historyEntry: {
+        id: "entry-1",
+        userMessage: "Replace track 2.",
+        assistantMessage: "Needs review.",
+        acceptedCount: 0,
+        rejectedCandidates: [],
+        createdAt: "now",
+        kind: "request",
+        playlistAction: "set",
+        playlistBefore: before,
+        resultingPlaylistUpdatedAt: current.updatedAt,
+        issueStatuses: []
+      }
+    });
+
+    expect(accepted.nextPlaylist?.tracks.map((track) => track.title)).toEqual([
+      before.tracks[0].title,
+      "Manual Song",
+      before.tracks[2].title
+    ]);
+  });
+
+  it("respects saved add-after placement when a manual match is accepted", () => {
+    const before = playlist([
+      track({ id: "track-1", sourceId: "1", title: "Firestarter", artist: "The Prodigy" }),
+      track({ id: "track-2", sourceId: "2", title: "Roads", artist: "Portishead" })
+    ]);
+    const match: AttemptedMatch = {
+      artist: "Bjork",
+      title: "Army of Me",
+      album: null,
+      durationMs: 200000,
+      runtime: "3:20",
+      source: "musicbrainz",
+      sourceId: "mbid",
+      confidence: "medium",
+      score: 0.78
+    };
+
+    const accepted = acceptManualMatchWorkflow(before, match, {
+      historyEntry: {
+        id: "entry-after",
+        userMessage: "Add Bjork's Army of Me after Firestarter.",
+        assistantMessage: "Needs match review.",
+        acceptedCount: 0,
+        rejectedCandidates: [],
+        createdAt: "now",
+        kind: "request",
+        issueStatuses: []
+      }
+    });
+
+    expect(accepted.nextPlaylist?.tracks.map((track) => track.title)).toEqual([
+      "Firestarter",
+      "Army of Me",
+      "Roads"
+    ]);
+  });
+
+  it("respects saved add-before placement when a manual match is accepted", () => {
+    const before = playlist([
+      track({ id: "track-1", sourceId: "1", title: "Firestarter", artist: "The Prodigy" }),
+      track({ id: "track-2", sourceId: "2", title: "Roads", artist: "Portishead" })
+    ]);
+    const match: AttemptedMatch = {
+      artist: "Bjork",
+      title: "Army of Me",
+      album: null,
+      durationMs: 200000,
+      runtime: "3:20",
+      source: "musicbrainz",
+      sourceId: "mbid-2",
+      confidence: "medium",
+      score: 0.78
+    };
+
+    const accepted = acceptManualMatchWorkflow(before, match, {
+      historyEntry: {
+        id: "entry-before",
+        userMessage: "Add Bjork's Army of Me before Roads.",
+        assistantMessage: "Needs match review.",
+        acceptedCount: 0,
+        rejectedCandidates: [],
+        createdAt: "now",
+        kind: "request",
+        issueStatuses: []
+      }
+    });
+
+    expect(accepted.nextPlaylist?.tracks.map((track) => track.title)).toEqual([
+      "Firestarter",
+      "Army of Me",
+      "Roads"
+    ]);
   });
 });

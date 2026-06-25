@@ -179,6 +179,20 @@ describe("UI redesign behavior", () => {
     expect(html).toContain("Undo last curator turn");
   });
 
+  it("renders a reuse-prompt action on the active exchange when requested", () => {
+    const html = renderToStaticMarkup(React.createElement(ActiveExchange, {
+      busy: false,
+      messages: [
+        { role: "user", content: "Retry this exact request." },
+        { role: "assistant", content: "The provider timed out." }
+      ],
+      onReusePrompt: () => undefined,
+      progressStatus: null
+    }));
+
+    expect(html).toContain("Reuse prompt");
+  });
+
   it("does not render curator-turn undo when no undoable curator state exists", () => {
     const html = renderToStaticMarkup(React.createElement(ActiveExchange, {
       busy: false,

@@ -1,6 +1,6 @@
 import type { NormalizedInstructionIntent } from "@/lib/ai/services/instructionIntent";
 import type { InstructionIntentParseStatus } from "@/lib/ai/services/instructionIntent";
-import type { ConversationContext, CuratorResponse, DiscoveryRadius, PlaylistConstraints, PlaylistState, Track } from "@/types/playlist";
+import type { BoundNamedTrack, BoundTrackPlacement, ConversationContext, CuratorResponse, DiscoveryRadius, PlaylistConstraints, PlaylistState, ReplacementMode, Track } from "@/types/playlist";
 import type { parseTrackRowsFromText } from "@/lib/playlist/io/textImport";
 import type { removeAlternateTrackVersions } from "@/lib/playlist/analysis/versionCleanup";
 import type { SuppressedCandidateFingerprint } from "@/types/playlist";
@@ -98,9 +98,12 @@ export type ResolvedCuratorRequestPlan = {
   replacementCount: number | null;
   instructionIntentStatus: InstructionIntentParseStatus | "not_attempted";
   effectiveDiscoveryRadius: DiscoveryRadius;
+  replacementMode: ReplacementMode;
   constraintState: ConstraintExecutionState;
   suppressionState: SuppressionExecutionState;
   preGenerationRemovalPlan: PreGenerationRemovalPlan;
+  addPlacement: BoundTrackPlacement | null;
+  replacementTarget: BoundNamedTrack | null;
   steps: CuratorPlannedStep[];
   debugNotes: string[];
 };

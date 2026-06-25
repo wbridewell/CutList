@@ -169,7 +169,7 @@ export const llmContracts = [
   {
     id: "operatorPlan",
     schema: operatorPlanSchema,
-    shapeDescription: "{\"routeFamily\":\"review\"|\"curator\"|\"import\"|\"conversational\",\"executionPolicy\":\"read_only\"|\"mutating\",\"planTemplate\":\"focused_transition_review\"|\"bridge_options_review\"|\"diagnosis_review\"|\"weak_links_review\"|\"compression_review\"|\"sequencing_review\"|\"curator_mutation\"|\"import_request\"|\"conversational_reply\",\"reviewMode\":\"full_critique\"|\"diagnose_only\"|\"weak_links_only\"|\"focused_transition_repair\"|\"bridge_options_only\"|\"compression_review\"|\"ending_repair\"|\"sequencing_only\"|null,\"operators\":OperatorPlanNode[],\"declaredEntities\":{\"namedTracks\":string[],\"transition\":{\"fromText\":string,\"toText\":string}|null,\"targetSpan\":string|null},\"parameterHints\":{\"requestedCount\":number|null,\"targetTotalTrackCount\":number|null,\"replacementCount\":number|null,\"maxTrackDurationMs\":number|null,\"avoidArtistRepeats\":boolean,\"preserve\":string[],\"avoid\":string[]},\"confidence\":\"high\"|\"medium\"|\"low\",\"planningNotes\":string[]}",
+    shapeDescription: "{\"routeFamily\":\"review\"|\"curator\"|\"import\"|\"conversational\",\"executionPolicy\":\"read_only\"|\"mutating\",\"planTemplate\":\"focused_transition_review\"|\"bridge_options_review\"|\"diagnosis_review\"|\"weak_links_review\"|\"compression_review\"|\"sequencing_review\"|\"curator_mutation\"|\"import_request\"|\"conversational_reply\",\"replacementMode\":\"generic\"|\"canonical_version\",\"reviewMode\":\"full_critique\"|\"diagnose_only\"|\"weak_links_only\"|\"focused_transition_repair\"|\"bridge_options_only\"|\"compression_review\"|\"ending_repair\"|\"sequencing_only\"|null,\"operators\":OperatorPlanNode[],\"declaredEntities\":{\"namedTracks\":string[],\"transition\":{\"fromText\":string,\"toText\":string}|null,\"placement\":{\"mode\":\"append\"|\"prepend\"|\"after_track\"|\"before_track\",\"anchorQuery\":string|null}|null,\"replacementTarget\":string|null,\"targetSpan\":string|null},\"parameterHints\":{\"requestedCount\":number|null,\"targetTotalTrackCount\":number|null,\"replacementCount\":number|null,\"maxTrackDurationMs\":number|null,\"avoidArtistRepeats\":boolean,\"preserve\":string[],\"avoid\":string[]},\"confidence\":\"high\"|\"medium\"|\"low\",\"planningNotes\":string[]}",
     safetyGuidance: [
       "Return only JSON with a typed operator plan. Do not add prose before or after it.",
       "Choose only from the provided operator kinds. Never invent a new mutating operator.",
@@ -178,6 +178,8 @@ export const llmContracts = [
     outputGuidance: [
       "Use read_only for diagnosis, critique, bridge, transition, sequencing-only review, and any prompt that says not to modify the playlist.",
       "Use mutating only for actual add, remove, replace, reorder, or import requests.",
+      "For executable add requests with placement language, populate declaredEntities.placement with append, prepend, after_track, or before_track and include the raw anchor text when applicable.",
+      "For same-song version normalization requests, set replacementMode = canonical_version and declaredEntities.replacementTarget to the existing playlist track being replaced.",
       "Focused transition review plans should normally include resolve_named_tracks, analyze_transition, generate_bridge_options, and summarize_for_user."
     ],
     parse: (value) => operatorPlanSchema.parse(value)

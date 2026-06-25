@@ -86,7 +86,7 @@ describe("collaboration helpers", () => {
         suggestedPrompt: "Swap the opener."
       }]
     };
-    const review = createPlaylistReviewHistoryEntry("Strong opener.", reviewData, "review-time");
+    const review = createPlaylistReviewHistoryEntry("Strong opener.", reviewData, "Review playlist", "review-time");
     const manual = createManualMatchHistoryEntry(track, "manual-time");
     const undo = createCuratorUndoHistoryEntry(undefined, "undo-time");
 

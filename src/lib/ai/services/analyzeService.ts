@@ -356,6 +356,8 @@ function bindTransitionLocally(playlist: PlaylistState, userQuestion?: string): 
     return {
       namedTracks: [],
       namedTransition: null,
+      placement: null,
+      replacementTarget: null,
       targetSpan: null,
       candidateCount: parseRequestedTrackCount(userQuestion ?? ""),
       maxTrackDurationMs: null,
@@ -414,6 +416,8 @@ function bindTransitionLocally(playlist: PlaylistState, userQuestion?: string): 
             ? "unresolved"
             : "fuzzy"
     },
+    placement: null,
+    replacementTarget: null,
     targetSpan: null,
     candidateCount: parseRequestedTrackCount(userQuestion ?? ""),
     maxTrackDurationMs: null,

@@ -6,6 +6,7 @@ import {
   type VerifySeedsResponse
 } from "@/lib/client/playlistApi";
 import { parseDiscoveryRadiusOverride } from "@/lib/playlist/discoveryRadius";
+import { bindDeclaredTrackPlacement, detectCanonicalReplacementTargetQuery, detectDeclaredTrackPlacement, resolveNamedTrack } from "@/lib/playlist/requestPlacement";
 import {
   createErrorHistoryEntry,
   createImportHistoryEntry,
@@ -17,10 +18,11 @@ import {
   reorderSummaryForMessage,
   trackFromAttemptedMatch,
   type ChatMessage,
+  type PendingEditContext,
   type RequestHistoryEntry
 } from "@/lib/playlist/collaboration";
 import { emitReviewRoutingTrace } from "@/lib/debug/reviewRouting";
-import { addTracksToPlaylist, applyCuratorResponse, insertTracksAfterTrack, isDuplicateTrack, removeTracksFromPlaylist, touchPlaylist } from "@/lib/playlist/state";
+import { addTracksToPlaylist, applyCuratorResponse, insertTracksAfterTrack, insertTracksBeforeTrack, isDuplicateTrack, removeTracksFromPlaylist, touchPlaylist } from "@/lib/playlist/state";
 import { parseTrackRowsFromText, type ParsedTrackLine } from "@/lib/playlist/io/textImport";
 import {
   classifyComposerRequestLegacy,
@@ -205,6 +207,58 @@ export function composeCuratorAssistantMessage(response: CuratorResponse, playli
   ].filter(Boolean).join("\n\n");
 }
 
+function derivePendingEditContext(
+  userMessage: string,
+  playlistBefore: PlaylistState,
+  response: CuratorResponse
+): PendingEditContext | undefined {
+  const placement = bindDeclaredTrackPlacement(playlistBefore, detectDeclaredTrackPlacement(userMessage));
+  if (placement) {
+    return {
+      kind: "add",
+      placement,
+      replacementMode: "generic",
+      replacementTargetTrackId: null,
+      replacementTargetLabel: null,
+      replacementSlotIndex: null
+    };
+  }
+
+  const replacementTargetQuery = detectCanonicalReplacementTargetQuery(playlistBefore, userMessage);
+  if (replacementTargetQuery) {
+    const boundTarget = resolveNamedTrack(playlistBefore, replacementTargetQuery);
+    if (boundTarget.trackId) {
+      return {
+        kind: "replace",
+        placement: null,
+        replacementMode: "canonical_version",
+        replacementTargetTrackId: boundTarget.trackId,
+        replacementTargetLabel: boundTarget.title && boundTarget.artist ? `${boundTarget.artist} - ${boundTarget.title}` : null,
+        replacementSlotIndex: playlistBefore.tracks.findIndex((track) => track.id === boundTarget.trackId)
+      };
+    }
+  }
+
+  if (response.playlistUpdate?.action !== "set" || !response.playlistUpdate.tracks) {
+    return undefined;
+  }
+  const nextTrackIds = new Set(response.playlistUpdate.tracks.map((track) => track.id));
+  const removedTracks = playlistBefore.tracks.filter((track) => !nextTrackIds.has(track.id));
+  if (removedTracks.length !== 1) {
+    return undefined;
+  }
+
+  const removedTrack = removedTracks[0];
+  return {
+    kind: "replace",
+    placement: null,
+    replacementMode: "generic",
+    replacementTargetTrackId: removedTrack.id,
+    replacementTargetLabel: `${removedTrack.artist} - ${removedTrack.title}`,
+    replacementSlotIndex: playlistBefore.tracks.findIndex((track) => track.id === removedTrack.id)
+  };
+}
+
 export async function runCuratorRequestWorkflow(
   input: {
     messages: ChatMessage[];
@@ -245,8 +299,14 @@ export async function runCuratorRequestWorkflow(
       data.message,
       data,
       nextPlaylist && playlistChangedMeaningfully(input.playlist, nextPlaylist)
-        ? { playlistBefore: input.playlist, resultingPlaylistUpdatedAt: nextPlaylist.updatedAt }
-        : {}
+        ? {
+          playlistBefore: input.playlist,
+          resultingPlaylistUpdatedAt: nextPlaylist.updatedAt,
+          pendingEditContext: derivePendingEditContext(input.outgoing, input.playlist, data)
+        }
+        : {
+          pendingEditContext: derivePendingEditContext(input.outgoing, input.playlist, data)
+        }
     );
     return {
       assistantMessage: { role: "assistant", content: assistantContent },
@@ -484,11 +544,11 @@ export async function runAnalyzeWorkflow(
     return {
       assistantMessage: { role: "assistant", content: assistantContent },
       clearInput: true,
-      historyEntry: createPlaylistReviewHistoryEntry(assistantContent, data),
+      historyEntry: createPlaylistReviewHistoryEntry(assistantContent, data, input.userMessage),
       review: data
     };
   } catch (error) {
-    return workflowErrorResult("Review playlist", error, "Analysis failed.");
+    return workflowErrorResult(input.userMessage || "Review playlist", error, "Analysis failed.");
   }
 }
 
@@ -725,7 +785,8 @@ export function promptForReviewSuggestion(suggestion: ReviewSuggestion, playlist
 
 export function acceptManualMatchWorkflow(
   playlist: PlaylistState,
-  match: AttemptedMatch
+  match: AttemptedMatch,
+  options: { historyEntry?: RequestHistoryEntry | null } = {}
 ): ClientWorkflowResult {
   const track = trackFromAttemptedMatch(match);
   if (!track) {
@@ -740,13 +801,69 @@ export function acceptManualMatchWorkflow(
     };
   }
 
+  const historyEntry = options.historyEntry;
+  const nextPlaylist = (() => {
+    const placement = historyEntry?.pendingEditContext?.kind === "add"
+      ? historyEntry.pendingEditContext.placement
+      : historyEntry?.userMessage
+        ? bindDeclaredTrackPlacement(playlist, detectDeclaredTrackPlacement(historyEntry.userMessage))
+        : null;
+    if (placement?.mode === "prepend") {
+      return touchPlaylist({
+        ...playlist,
+        tracks: [track, ...playlist.tracks]
+      });
+    }
+    if (placement?.mode === "after_track" && placement.anchorTrackId) {
+      return insertTracksAfterTrack(playlist, placement.anchorTrackId, [track]);
+    }
+    if (placement?.mode === "before_track" && placement.anchorTrackId) {
+      return insertTracksBeforeTrack(playlist, placement.anchorTrackId, [track]);
+    }
+
+    if (historyEntry?.pendingEditContext?.kind === "replace" && historyEntry.pendingEditContext.replacementSlotIndex != null) {
+      const insertAt = historyEntry.pendingEditContext.replacementSlotIndex;
+      return touchPlaylist({
+        ...playlist,
+        tracks: [
+          ...playlist.tracks.slice(0, insertAt),
+          track,
+          ...playlist.tracks.slice(insertAt)
+        ]
+      });
+    }
+
+    if (!historyEntry?.playlistBefore || historyEntry.playlistAction !== "set") {
+      return addTracksToPlaylist(playlist, [track]);
+    }
+
+    const currentIds = new Set(playlist.tracks.map((item) => item.id));
+    const missingIndexes = historyEntry.playlistBefore.tracks
+      .map((item, index) => currentIds.has(item.id) ? null : index)
+      .filter((index): index is number => index != null);
+
+    if (missingIndexes.length !== 1) {
+      return addTracksToPlaylist(playlist, [track]);
+    }
+
+    const insertAt = missingIndexes[0];
+    return touchPlaylist({
+      ...playlist,
+      tracks: [
+        ...playlist.tracks.slice(0, insertAt),
+        track,
+        ...playlist.tracks.slice(insertAt)
+      ]
+    });
+  })();
+
   return {
     assistantMessage: {
       role: "assistant",
       content: `${match.isRecommended ? "Added recommended match" : "Added manually reviewed match"}: ${track.artist} - ${track.title}.`
     },
     historyEntry: createManualMatchHistoryEntry(track, { recommended: match.isRecommended }),
-    nextPlaylist: addTracksToPlaylist(playlist, [track]),
+    nextPlaylist,
     suppressAssistantMessage: true
   };
 }

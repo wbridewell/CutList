@@ -1,8 +1,10 @@
 import { z } from "zod";
 import {
+  BoundTrackPlacementSchema,
   CuratorResponseSchema,
   PlaylistStateSchema,
   RejectedCandidateSchema,
+  ReplacementModeSchema,
   ReviewSuggestionSchema
 } from "@/lib/playlist/schemas";
 import type { CuratorResponse, PlaylistState } from "@/types/playlist";
@@ -75,6 +77,15 @@ const HistoryIssueStatusSchema = z.object({
   actedAt: z.string().nullable()
 });
 
+const PendingEditContextSchema = z.object({
+  kind: z.enum(["add", "replace"]),
+  placement: BoundTrackPlacementSchema.nullable().default(null),
+  replacementMode: ReplacementModeSchema.default("generic"),
+  replacementTargetTrackId: z.string().nullable().default(null),
+  replacementTargetLabel: z.string().nullable().default(null),
+  replacementSlotIndex: z.number().int().nonnegative().nullable().default(null)
+});
+
 const RequestHistoryEntrySchema = z.object({
   id: z.string().min(1),
   userMessage: z.string(),
@@ -90,6 +101,7 @@ const RequestHistoryEntrySchema = z.object({
   playlistAction: z.enum(["set", "add", "remove", "reorder"]).optional(),
   playlistBefore: PlaylistStateSchema.optional(),
   resultingPlaylistUpdatedAt: z.string().optional(),
+  pendingEditContext: PendingEditContextSchema.optional(),
   reviewSuggestions: z.array(ReviewSuggestionSchema).optional(),
   issueStatuses: z.array(HistoryIssueStatusSchema).optional()
 });

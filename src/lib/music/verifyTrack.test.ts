@@ -190,6 +190,63 @@ describe("track verification", () => {
     }
   });
 
+  it("can exclude the exact current recording when verifying a same-song replacement", async () => {
+    const dualProvider: MusicMetadataProvider = {
+      name: "itunes",
+      async searchTrack() {
+        return [
+          {
+            source: "itunes",
+            sourceId: "old",
+            title: "Blue Monday",
+            artist: "New Order",
+            album: "iTunes Originals",
+            durationMs: 450000,
+            sourceUrl: null,
+            artworkUrl: null,
+            explicit: false,
+            releaseDate: null,
+            primaryGenreName: "Alternative"
+          },
+          {
+            source: "itunes",
+            sourceId: "new",
+            title: "Blue Monday",
+            artist: "New Order",
+            album: "Substance",
+            durationMs: 450000,
+            sourceUrl: null,
+            artworkUrl: null,
+            explicit: false,
+            releaseDate: null,
+            primaryGenreName: "Alternative"
+          }
+        ];
+      },
+      async lookupTrack() {
+        return null;
+      }
+    };
+
+    const outcome = await verifyTrack(
+      { artist: "New Order", title: "Blue Monday" },
+      undefined,
+      dualProvider,
+      {
+        excludeSourceIdentity: {
+          source: "itunes",
+          sourceId: "old"
+        }
+      }
+    );
+
+    expect(outcome.status).toBe("verified");
+    if (outcome.status === "verified") {
+      expect(outcome.track.sourceId).toBe("new");
+      expect(outcome.track.album).toBe("Substance");
+    }
+  });
+
   it("rejects ambiguous or nonexistent matches", async () => {
     const emptyProvider: MusicMetadataProvider = {
       name: "itunes",

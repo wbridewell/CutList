@@ -11,6 +11,13 @@ export type VerificationOutcome =
   | { status: "verified"; track: Track }
   | { status: "rejected"; rejected: RejectedCandidate };
 
+type VerificationOptions = {
+  excludeSourceIdentity?: {
+    source: Track["source"];
+    sourceId: string | null;
+  } | null;
+};
+
 function genreTagsFrom(result: TrackSearchResult, candidate?: CandidateTrack): string[] {
   const tags = new Set<string>();
   for (const tag of candidate?.vibeTags ?? []) {
@@ -184,10 +191,19 @@ async function verifyTrackOnce(
   query: TrackSearchQuery,
   candidate: CandidateTrack | undefined,
   providers: MusicMetadataProvider[],
-  verificationNote?: string
+  verificationNote?: string,
+  options?: VerificationOptions
 ): Promise<VerificationOutcome> {
   const { results, providerErrors } = await collectProviderResults(query, providers);
-  const ranked = rankMatches(query, results);
+  const ranked = rankMatches(
+    query,
+    options?.excludeSourceIdentity?.sourceId
+      ? results.filter((result) => !(
+        result.source === options.excludeSourceIdentity?.source &&
+        result.sourceId === options.excludeSourceIdentity?.sourceId
+      ))
+      : results
+  );
   const best = ranked[0];
   const attemptedMatches = attemptedMatchesFrom(query, results);
   if (!best || best.score < verificationPolicy.ambiguousScore) {
@@ -208,14 +224,15 @@ async function verifyTrackOnce(
 export async function verifyTrack(
   query: TrackSearchQuery,
   candidate?: CandidateTrack,
-  providerOrProviders?: MusicMetadataProvider | MusicMetadataProvider[]
+  providerOrProviders?: MusicMetadataProvider | MusicMetadataProvider[],
+  options?: VerificationOptions
 ): Promise<VerificationOutcome> {
   const startedAt = performance.now();
   try {
     const providers = providerOrProviders == null
       ? createDefaultMetadataProviders()
       : Array.isArray(providerOrProviders) ? providerOrProviders : [providerOrProviders];
-    const firstOutcome = await verifyTrackOnce(query, candidate, providers);
+    const firstOutcome = await verifyTrackOnce(query, candidate, providers, undefined, options);
     if (firstOutcome.status === "verified") {
       return firstOutcome;
     }
@@ -226,7 +243,8 @@ export async function verifyTrack(
         fallback.query(query),
         candidate,
         providers,
-        fallback.verificationNote
+        fallback.verificationNote,
+        options
       );
 
       if (fallbackOutcome.status === "verified") {

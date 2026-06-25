@@ -65,9 +65,16 @@ function responseRemovedTracks(
   return before.tracks.filter((track) => !remaining.has(track.id));
 }
 
-function responseAcceptedTracks(response: CuratorResponse): Track[] {
+function responseAcceptedTracks(
+  before: PlaylistState,
+  response: CuratorResponse
+): Track[] {
   if (response.playlistUpdate?.action === "add") {
     return response.playlistUpdate.tracks;
+  }
+  if (response.playlistUpdate?.action === "set") {
+    const previousTrackIds = new Set(before.tracks.map((track) => track.id));
+    return response.playlistUpdate.tracks.filter((track) => !previousTrackIds.has(track.id));
   }
   return [];
 }
@@ -146,6 +153,9 @@ function buildStepPlan(
     replacementCount: step.replacementCount ?? plan.replacementCount,
     constraintState: buildStepConstraintState(plan.constraintState, playlistWithConstraints, context.activeConstraints, context.persistedConstraints),
     preGenerationRemovalPlan: buildPreGenerationRemovalPlan(playlistWithConstraints, step.originText, context.activeConstraints),
+    replacementMode: plan.replacementMode,
+    replacementTarget: plan.replacementTarget,
+    addPlacement: step.kind === "add" ? plan.addPlacement : null,
     steps: [step],
     explicitTrackRequests: plan.explicitTrackRequests
   };
@@ -155,10 +165,58 @@ async function executeGenerationStyleStep(
   stepPlan: ResolvedCuratorRequestPlan,
   options: CuratorRunOptions
 ): Promise<{ response: CuratorResponse; nextActiveConstraints: PlaylistConstraints }> {
+  if (
+    stepPlan.operation === "generate" &&
+    stepPlan.addPlacement &&
+    (stepPlan.addPlacement.mode === "after_track" || stepPlan.addPlacement.mode === "before_track") &&
+    stepPlan.addPlacement.resolution !== "exact" &&
+    stepPlan.addPlacement.resolution !== "fuzzy"
+  ) {
+    const qualifier = stepPlan.addPlacement.anchorQuery ?? "that track";
+    const detail = stepPlan.addPlacement.resolution === "ambiguous"
+      ? `I found more than one possible match for "${qualifier}", so I did not guess where to insert the addition.`
+      : `I could not find "${qualifier}" in the playlist, so I did not append the new track somewhere else.`;
+    return {
+      response: {
+        message: detail,
+        playlistUpdate: null,
+        playlistMeta: null,
+        updatedConstraints: stepPlan.constraintState.persistedConstraintsAfterSuccess,
+        constraintReport: evaluatePlaylistConstraints(stepPlan.playlist.tracks, stepPlan.constraintState.activeConstraints),
+        rejectedCandidates: []
+      },
+      nextActiveConstraints: stepPlan.constraintState.activeConstraints
+    };
+  }
+
   let baseTracks = stepPlan.preGenerationRemovalPlan.baseTracks;
   let preGenerationRemovedTracks = stepPlan.preGenerationRemovalPlan.removedTracks;
 
-  if (stepPlan.operation === "replace" && preGenerationRemovedTracks.length === 0) {
+  if (stepPlan.replacementMode === "canonical_version") {
+    const target = stepPlan.replacementTarget;
+    if (!target || (target.resolution !== "exact" && target.resolution !== "fuzzy") || !target.trackId) {
+      const qualifier = target?.query ?? "that version";
+      const detail = target?.resolution === "ambiguous"
+        ? `I found more than one possible match for "${qualifier}", so I did not guess which existing version to replace.`
+        : `I could not identify "${qualifier}" in the playlist, so I did not replace anything.`;
+      return {
+        response: {
+          message: detail,
+          playlistUpdate: null,
+          playlistMeta: null,
+          updatedConstraints: stepPlan.constraintState.persistedConstraintsAfterSuccess,
+          constraintReport: evaluatePlaylistConstraints(stepPlan.playlist.tracks, stepPlan.constraintState.activeConstraints),
+          rejectedCandidates: []
+        },
+        nextActiveConstraints: stepPlan.constraintState.activeConstraints
+      };
+    }
+
+    baseTracks = baseTracks.filter((track) => track.id !== target.trackId);
+    preGenerationRemovedTracks = stepPlan.playlist.tracks.filter((track) => track.id === target.trackId);
+  }
+
+  if (stepPlan.operation === "replace" && stepPlan.replacementMode !== "canonical_version" && preGenerationRemovedTracks.length === 0) {
     const replacementTargets = await selectReplacementTargets(stepPlan, stepPlan.replacementCount, options);
     if (replacementTargets.length > 0) {
       baseTracks = baseTracks.filter((track) => !replacementTargets.some((removed) => removed.id === track.id));
@@ -308,7 +366,7 @@ function createStepResult(
     stepKind: step.kind,
     sourceOrder: step.sourceOrder,
     originText: step.originText,
-    acceptedTracks: responseAcceptedTracks(response),
+    acceptedTracks: responseAcceptedTracks(before, response),
     removedTracks: responseRemovedTracks(before, response),
     rejectedCandidates: response.rejectedCandidates,
     playlistAction: response.playlistUpdate?.action ?? null,

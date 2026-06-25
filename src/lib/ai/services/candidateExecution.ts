@@ -6,6 +6,7 @@ import { enforceNewTracks, evaluatePlaylistConstraints } from "@/lib/playlist/co
 import { filteredSuppressedCandidates, promptSuppressedCandidateEntries } from "@/lib/playlist/candidateSuppression";
 import { normalizeText } from "@/lib/music/normalize";
 import { verifyTrack } from "@/lib/music/verifyTrack";
+import { insertTracksAfterTrack, insertTracksBeforeTrack } from "@/lib/playlist/state";
 import type { CuratorRunOptions } from "@/lib/ai/curatorTypes";
 import type { CandidateExecutionResult, ResolvedCuratorRequestPlan } from "@/lib/ai/services/workflowTypes";
 import type { CuratorResponse, RejectedCandidate, Track } from "@/types/playlist";
@@ -132,6 +133,85 @@ function summarizeTracks(tracks: Track[], limit = 4): string {
   return tracks.slice(0, limit).map((track) => `${track.artist} - ${track.title}`).join("; ");
 }
 
+function placementSummaryText(plan: ResolvedCuratorRequestPlan, acceptedTracks: Track[]): string | null {
+  if (acceptedTracks.length === 0) {
+    return null;
+  }
+  const placement = plan.addPlacement;
+  if (!placement) {
+    return null;
+  }
+
+  switch (placement.mode) {
+    case "prepend":
+      return `Placed ${acceptedTracks.length} added track${acceptedTracks.length === 1 ? "" : "s"} at the beginning of the playlist.`;
+    case "append":
+      return `Placed ${acceptedTracks.length} added track${acceptedTracks.length === 1 ? "" : "s"} at the end of the playlist.`;
+    case "after_track":
+      return placement.anchorLabel
+        ? `Placed ${acceptedTracks.length} added track${acceptedTracks.length === 1 ? "" : "s"} after ${placement.anchorLabel}.`
+        : null;
+    case "before_track":
+      return placement.anchorLabel
+        ? `Placed ${acceptedTracks.length} added track${acceptedTracks.length === 1 ? "" : "s"} before ${placement.anchorLabel}.`
+        : null;
+    default:
+      return null;
+  }
+}
+
+function buildPlacedTracks(plan: ResolvedCuratorRequestPlan, baseTracks: Track[], acceptedTracks: Track[]): Track[] | null {
+  const placement = plan.addPlacement;
+  if (!placement) {
+    return null;
+  }
+
+  if (placement.mode === "append") {
+    return null;
+  }
+  if (placement.mode === "prepend") {
+    return [...acceptedTracks, ...baseTracks];
+  }
+  if (placement.mode === "after_track" && placement.anchorTrackId) {
+    return insertTracksAfterTrack(
+      { ...plan.playlist, tracks: baseTracks },
+      placement.anchorTrackId,
+      acceptedTracks
+    ).tracks;
+  }
+  if (placement.mode === "before_track" && placement.anchorTrackId) {
+    return insertTracksBeforeTrack(
+      { ...plan.playlist, tracks: baseTracks },
+      placement.anchorTrackId,
+      acceptedTracks
+    ).tracks;
+  }
+  return null;
+}
+
+function buildReplacementTracks(plan: ResolvedCuratorRequestPlan, removedTracks: Track[], acceptedTracks: Track[]): Track[] {
+  const removedIds = new Set(removedTracks.map((track) => track.id));
+  const replacementTracks: Track[] = [];
+  let acceptedIndex = 0;
+
+  for (const track of plan.playlist.tracks) {
+    if (!removedIds.has(track.id)) {
+      replacementTracks.push(track);
+      continue;
+    }
+    if (acceptedIndex < acceptedTracks.length) {
+      replacementTracks.push(acceptedTracks[acceptedIndex]);
+      acceptedIndex += 1;
+    }
+  }
+
+  if (acceptedIndex < acceptedTracks.length) {
+    replacementTracks.push(...acceptedTracks.slice(acceptedIndex));
+  }
+
+  return replacementTracks;
+}
+
 function composeCuratorSummary(input: {
   acceptedTracks: Track[];
   acceptedCount: number;
@@ -139,6 +219,7 @@ function composeCuratorSummary(input: {
   constraintRemovedTracks: Track[];
   effectiveRequestedCount: number | null;
   operation: ResolvedCuratorRequestPlan["operation"];
+  placementText: string | null;
   replacementRemovedTracks: Track[];
   rejectedCount: number;
   versionCleanup: ResolvedCuratorRequestPlan["preGenerationRemovalPlan"]["versionCleanup"];
@@ -163,6 +244,7 @@ function composeCuratorSummary(input: {
     constraintRemovalText,
     factualReplacementText,
     curatedMessageText,
+    input.placementText,
     input.acceptedCount > 0 ? `I verified and accepted ${input.acceptedCount} track${input.acceptedCount === 1 ? "" : "s"}${targetText}.` : "I could not accept any new tracks from this pass.",
     input.rejectedCount > 0 ? `I rejected ${input.rejectedCount} candidate${input.rejectedCount === 1 ? "" : "s"} because verification or constraints did not hold.` : null
   ].filter(Boolean).join(" ");
@@ -177,6 +259,68 @@ export async function executeCandidateGeneration(
     effectiveRequestedCount: number | null;
   }
 ): Promise<CandidateExecutionResult | CuratorResponse> {
+  if (plan.replacementMode === "canonical_version" && plan.replacementTarget?.title && plan.replacementTarget.artist) {
+    const acceptedTracks: Track[] = [];
+    const rejectedCandidates: RejectedCandidate[] = [];
+    let activeConstraints = plan.constraintState.activeConstraints;
+    const targetTrack = plan.playlist.tracks.find((track) => track.id === plan.replacementTarget?.trackId) ?? null;
+    const outcome = await verifyTrack(
+      {
+        title: plan.replacementTarget.title,
+        artist: plan.replacementTarget.artist
+      },
+      {
+        title: plan.replacementTarget.title,
+        artist: plan.replacementTarget.artist,
+        album: null,
+        reason: "Canonical version replacement.",
+        vibeTags: [],
+        expectedFitNotes: "",
+        energy: null
+      },
+      undefined,
+      targetTrack?.source && targetTrack.sourceId
+        ? {
+          excludeSourceIdentity: {
+            source: targetTrack.source,
+            sourceId: targetTrack.sourceId
+          }
+        }
+        : undefined
+    );
+
+    if (outcome.status === "verified") {
+      const isSameRecording = targetTrack &&
+        targetTrack.source === outcome.track.source &&
+        targetTrack.sourceId != null &&
+        targetTrack.sourceId === outcome.track.sourceId;
+      if (!isSameRecording) {
+        const enforcement = enforceNewTracks([...input.baseTracks, ...acceptedTracks], [outcome.track], activeConstraints);
+        acceptedTracks.push(...enforcement.accepted);
+        for (const rejected of enforcement.rejected) {
+          pushUniqueRejectedCandidate(rejectedCandidates, rejected);
+        }
+        activeConstraints = consumeRequiredGenreAdditions(activeConstraints, enforcement.accepted);
+      } else {
+        pushUniqueRejectedCandidate(rejectedCandidates, {
+          title: plan.replacementTarget.title,
+          artist: plan.replacementTarget.artist,
+          reason: "The best metadata match was still the same exact recording, so no canonical replacement was applied."
+        });
+      }
+    } else {
+      pushUniqueRejectedCandidate(rejectedCandidates, outcome.rejected);
+    }
+
+    return {
+      acceptedTracks,
+      rejectedCandidates,
+      playlistMeta: null,
+      activeConstraints,
+      batchMessages: []
+    };
+  }
+
   const explicitRequestedTracks = plan.explicitTrackRequests;
   if (explicitRequestedTracks.length > 0) {
     const acceptedTracks: Track[] = [];
@@ -388,6 +532,7 @@ export function composeGenerationResponse(
     constraintRemovedTracks: plan.preGenerationRemovalPlan.constraintRemovedTracks,
     effectiveRequestedCount: input.effectiveRequestedCount,
     operation: plan.operation,
+    placementText: placementSummaryText(plan, result.acceptedTracks),
     replacementRemovedTracks: input.preGenerationRemovedTracks,
     rejectedCount: result.rejectedCandidates.length,
     versionCleanup: plan.preGenerationRemovalPlan.versionCleanup
@@ -398,18 +543,28 @@ export function composeGenerationResponse(
     activeRequestScopedConstraints(plan.constraintState)
   );
 
+  const placedTracks = input.preGenerationRemovedTracks.length === 0
+    ? buildPlacedTracks(plan, input.baseTracks, result.acceptedTracks)
+    : null;
+  const replacementTracks = input.preGenerationRemovedTracks.length > 0
+    ? buildReplacementTracks(plan, input.preGenerationRemovedTracks, result.acceptedTracks)
+    : null;
+  const finalTracks = replacementTracks ?? placedTracks ?? [...input.baseTracks, ...result.acceptedTracks];
+
   return {
     message,
     playlistUpdate: input.preGenerationRemovedTracks.length > 0 || result.acceptedTracks.length > 0
       ? {
-        action: input.preGenerationRemovedTracks.length > 0 ? "set" : "add",
-        tracks: input.preGenerationRemovedTracks.length > 0 ? [...input.baseTracks, ...result.acceptedTracks] : result.acceptedTracks,
+        action: input.preGenerationRemovedTracks.length > 0 || placedTracks ? "set" : "add",
+        tracks: input.preGenerationRemovedTracks.length > 0
+          ? replacementTracks!
+          : placedTracks ?? result.acceptedTracks,
         orderRationale: null
       }
       : null,
     playlistMeta: result.playlistMeta,
     updatedConstraints: persistedConstraints,
-    constraintReport: evaluatePlaylistConstraints([...input.baseTracks, ...result.acceptedTracks], persistedConstraints),
+    constraintReport: evaluatePlaylistConstraints(finalTracks, persistedConstraints),
     rejectedCandidates: result.rejectedCandidates
   };
 }

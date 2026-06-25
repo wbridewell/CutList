@@ -3,6 +3,7 @@ import {
   addTracksToPlaylist,
   applyCuratorResponse,
   insertTracksAfterTrack,
+  insertTracksBeforeTrack,
   isDuplicateTrack,
   moveTrackInPlaylist,
   removePlaylistConstraint,
@@ -107,6 +108,12 @@ describe("playlist state operations", () => {
     const appended = insertTracksAfterTrack(playlist, "missing", [trackB], "fallback");
     expect(appended.tracks).toEqual([trackA, trackB]);
     expect(appended.updatedAt).toBe("fallback");
+
+    const insertedBefore = insertTracksBeforeTrack({ ...playlist, tracks: [trackA, trackB] }, trackB.id, [
+      { ...trackB, id: "itunes:4", title: "Lead-in" }
+    ], "before");
+    expect(insertedBefore.tracks.map((track) => track.title)).toEqual(["Song A", "Lead-in", "Song B"]);
+    expect(insertedBefore.updatedAt).toBe("before");
 
     const moved = moveTrackInPlaylist(withAdded, 1, -1, "moved");
     expect(moved.tracks).toEqual([trackB, trackA]);

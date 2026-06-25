@@ -4,9 +4,11 @@ import { formatRuntime } from "@/lib/playlist/runtime";
 import type {
   AnalyzePlaylistResponse,
   AttemptedMatch,
+  BoundTrackPlacement,
   CuratorResponse,
   PlaylistState,
   RejectedCandidate,
+  ReplacementMode,
   ReviewSuggestion,
   Track
 } from "@/types/playlist";
@@ -17,6 +19,7 @@ export type ChatMessage = {
 };
 
 export type RequestHistoryKind = "request" | "seed" | "import" | "review" | "manual-match" | "error" | "undo";
+export type PendingEditKind = "add" | "replace";
 
 export type HistoryIssueKind = "rejected_candidate" | "review_suggestion";
 export type RejectedCandidateIssueStatus = "rejected" | "accepted" | "dismissed" | "blocked";
@@ -28,6 +31,15 @@ export type HistoryIssueStatus = {
   issueKind: HistoryIssueKind;
   status: HistoryIssueStatusValue;
   actedAt: string | null;
+};
+
+export type PendingEditContext = {
+  kind: PendingEditKind;
+  placement: BoundTrackPlacement | null;
+  replacementMode: ReplacementMode;
+  replacementTargetTrackId: string | null;
+  replacementTargetLabel: string | null;
+  replacementSlotIndex: number | null;
 };
 
 export type RequestHistoryEntry = {
@@ -45,6 +57,7 @@ export type RequestHistoryEntry = {
   playlistAction?: NonNullable<CuratorResponse["playlistUpdate"]>["action"];
   playlistBefore?: PlaylistState;
   resultingPlaylistUpdatedAt?: string;
+  pendingEditContext?: PendingEditContext;
   reviewSuggestions?: ReviewSuggestion[];
   issueStatuses?: HistoryIssueStatus[];
 };
@@ -53,6 +66,7 @@ type RequestHistoryOptions = {
   createdAt?: string;
   playlistBefore?: PlaylistState;
   resultingPlaylistUpdatedAt?: string;
+  pendingEditContext?: PendingEditContext;
 };
 
 export function createCollaborationId(createdAt = new Date().toISOString()): string {
@@ -84,6 +98,7 @@ export function createRequestHistoryEntry(
     playlistAction: response.playlistUpdate?.action,
     playlistBefore: typeof options === "string" ? undefined : options.playlistBefore,
     resultingPlaylistUpdatedAt: typeof options === "string" ? undefined : options.resultingPlaylistUpdatedAt,
+    pendingEditContext: typeof options === "string" ? undefined : options.pendingEditContext,
     issueStatuses: createRejectedCandidateIssueStatuses(response.rejectedCandidates)
   };
 }
@@ -147,11 +162,12 @@ export function createImportHistoryEntry(
 export function createPlaylistReviewHistoryEntry(
   assistantMessage: string,
   review: Pick<AnalyzePlaylistResponse, "reviewSuggestions">,
+  userMessage = "Review playlist",
   createdAt = new Date().toISOString()
 ): RequestHistoryEntry {
   return {
     id: createCollaborationId(createdAt),
-    userMessage: "Review playlist",
+    userMessage,
     assistantMessage,
     acceptedCount: 0,
     rejectedCandidates: [],

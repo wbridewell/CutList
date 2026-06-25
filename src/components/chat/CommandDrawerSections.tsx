@@ -482,7 +482,13 @@ export function InputsSection({
   );
 }
 
-export function HistorySection({ history }: { history: RequestHistoryEntry[] }) {
+export function HistorySection({
+  history,
+  onReusePrompt
+}: {
+  history: RequestHistoryEntry[];
+  onReusePrompt?: (prompt: string) => void;
+}) {
   return (
     <div className="drawer-content drawer-history-panel">
       <div className="drawer-panel-head">
@@ -491,7 +497,7 @@ export function HistorySection({ history }: { history: RequestHistoryEntry[] }) 
       </div>
       <p className="drawer-note">Conversation turns and issue outcomes stay here after you act on them.</p>
       <div className="shelf-block drawer-history">
-        <ConversationTimeline history={history} />
+        <ConversationTimeline history={history} onReusePrompt={onReusePrompt} />
       </div>
     </div>
   );

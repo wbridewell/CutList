@@ -13,7 +13,8 @@ import { evaluatePlaylistConstraints } from "@/lib/playlist/constraints";
 import { parseTrackRowsFromText } from "@/lib/playlist/io/textImport";
 import { removeAlternateTrackVersions } from "@/lib/playlist/analysis/versionCleanup";
 import { explicitlyRequestedSuppressionFingerprints } from "@/lib/playlist/candidateSuppression";
-import type { PlaylistConstraints, PlaylistState, Track } from "@/types/playlist";
+import { bindDeclaredTrackPlacement, detectDeclaredTrackPlacement } from "@/lib/playlist/requestPlacement";
+import type { PlaylistConstraints, PlaylistState, ResolvedOperatorPlan, Track } from "@/types/playlist";
 import type { ConstraintExecutionState } from "@/lib/ai/services/workflowTypes";
 
 function parseExplicitRequestedArtists(userMessage: string): string[] {
@@ -178,7 +179,7 @@ export function buildPreGenerationRemovalPlan(
 export async function resolveCuratorRequestPlan(
   playlist: PlaylistState,
   userMessage: string,
-  options: CuratorRunOptions = {}
+  options: CuratorRunOptions & { operatorPlan?: ResolvedOperatorPlan } = {}
 ): Promise<ResolvedCuratorRequestPlan> {
   const deterministicParse = parseDeterministicRequest(userMessage, playlist.constraints);
   const deterministicConstraints = deterministicParse.deterministicConstraints;
@@ -186,6 +187,10 @@ export async function resolveCuratorRequestPlan(
     .filter((clause) => clause.operations.includes("reorder"))
     .map((clause) => clause.text);
   const parsedTracks = parseTrackRowsFromText(userMessage, { allowHeaderlessCommaRows: false });
+  const operatorReplacementMode = options.operatorPlan?.replacementMode ?? "generic";
+  const replacementTarget = options.operatorPlan?.boundEntities.replacementTarget ?? null;
+  const detectedPlacement = options.operatorPlan?.boundEntities.placement
+    ?? bindDeclaredTrackPlacement(playlist, detectDeclaredTrackPlacement(userMessage));
   const heuristics = collectCuratorHeuristics(userMessage, deterministicConstraints);
   const suppressionState = {
     entries: playlist.suppressedCandidateFingerprints ?? [],
@@ -222,9 +227,12 @@ export async function resolveCuratorRequestPlan(
       replacementCount: null,
       instructionIntentStatus: "not_attempted",
       effectiveDiscoveryRadius,
+      replacementMode: operatorReplacementMode,
       constraintState,
       suppressionState,
       preGenerationRemovalPlan: buildPreGenerationRemovalPlan(playlist, userMessage, constraintState.activeConstraints),
+      addPlacement: operation === "replace" ? null : detectedPlacement,
+      replacementTarget,
       steps: [step],
       debugNotes: [debugNote]
     };
@@ -360,9 +368,12 @@ export async function resolveCuratorRequestPlan(
     replacementCount,
     instructionIntentStatus: instructionIntentResult.status,
     effectiveDiscoveryRadius: heuristics.discoveryRadiusOverride ?? playlist.discoveryRadius ?? "moderate",
+    replacementMode: operatorReplacementMode,
     constraintState,
     suppressionState,
     preGenerationRemovalPlan,
+    addPlacement: operation === "replace" ? null : detectedPlacement,
+    replacementTarget,
     steps: stepPlan.steps,
     debugNotes: [
       ...stepPlan.debugNotes,
