@@ -13,6 +13,7 @@ import { evaluatePlaylistConstraints } from "@/lib/playlist/constraints";
 import { parseTrackRowsFromText } from "@/lib/playlist/io/textImport";
 import { removeAlternateTrackVersions } from "@/lib/playlist/analysis/versionCleanup";
 import { explicitlyRequestedSuppressionFingerprints } from "@/lib/playlist/candidateSuppression";
+import { normalizeText } from "@/lib/music/normalize";
 import { bindDeclaredTrackPlacement, detectDeclaredTrackPlacement } from "@/lib/playlist/requestPlacement";
 import type { PlaylistConstraints, PlaylistState, ResolvedOperatorPlan, Track } from "@/types/playlist";
 import type { ConstraintExecutionState } from "@/lib/ai/services/workflowTypes";
@@ -117,12 +118,12 @@ function sanitizeConstraintStateWithDeterministicPlan(
     return constraintState;
   }
 
-  const normalizedReorderClauses = new Set(reorderClauseTexts.map((text) => text.trim().toLowerCase()));
+  const normalizedReorderClauses = new Set(reorderClauseTexts.map((text) => normalizeText(text)));
   const stripReorderNotes = (constraints: PlaylistConstraints): PlaylistConstraints => {
     if (!(constraints.notes?.length)) {
       return constraints;
     }
-    const notes = constraints.notes.filter((note) => !normalizedReorderClauses.has(note.trim().toLowerCase()));
+    const notes = constraints.notes.filter((note) => !normalizedReorderClauses.has(normalizeText(note)));
     return notes.length === constraints.notes.length
       ? constraints
       : { ...constraints, notes: notes.length > 0 ? notes : undefined };

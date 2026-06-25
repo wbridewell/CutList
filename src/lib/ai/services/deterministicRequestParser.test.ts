@@ -56,6 +56,26 @@ describe("deterministicRequestParser", () => {
     expect(result.cleanupSignals.shouldPruneExistingForConstraints).toBe(true);
   });
 
+  it("does not misread per-artist limits as genre quota rules", () => {
+    const result = parseDeterministicRequest(
+      "no more than one track per artist"
+    );
+
+    expect(result.deterministicPersistentConstraints.maxTracksPerArtist).toBe(1);
+    expect(result.deterministicPersistentConstraints.noMoreFromGenres).toBeUndefined();
+    expect(result.deterministicPersistentConstraints.genreLimits).toBeUndefined();
+  });
+
+  it("does not misread from-each-artist limits as genre quota rules", () => {
+    const result = parseDeterministicRequest(
+      "limit this to 2 from each artist"
+    );
+
+    expect(result.deterministicPersistentConstraints.maxTracksPerArtist).toBe(2);
+    expect(result.deterministicPersistentConstraints.noMoreFromGenres).toBeUndefined();
+    expect(result.deterministicPersistentConstraints.genreLimits).toBeUndefined();
+  });
+
   it("does not turn mixed structural prompts into genre-addition guidance", () => {
     const result = parseDeterministicRequest(
       "add a constraint that no more than 2 songs by the same artist can appear on the playlist and then remove tracks that violate that constraint. this is a playlist of covers only. add two songs by lingua ignota that are covers. reorganize the playlist into a verifiable narrative arc."

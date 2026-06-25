@@ -136,7 +136,8 @@ function isUsableGenreQuotaLabel(value: string): boolean {
   const normalized = value.toLowerCase().trim();
   return Boolean(normalized) &&
     !GENERIC_ADDITION_WORDS.has(normalized) &&
-    !/\b(?:per artist|exists?|exist|add|fill|round|bring|build|pump|extend|grow|total)\b/i.test(normalized);
+    !/\b(?:per artist|same artist|from each artist|by the same artist|exists?|exist|add|fill|round|bring|build|pump|extend|grow|total)\b/i.test(normalized) &&
+    !/^than\b/i.test(normalized);
 }
 
 function cleanRequestedTrackFragment(value: string): string {
@@ -591,7 +592,7 @@ function extractConstraintsForScope(
 
   for (const match of text.matchAll(/no more\s+([\w -]{2,40})(?:\s+songs?|\s+tracks?)?/gi)) {
     const genre = match[1].trim();
-    if (genre && !/songs? by|tracks? by/i.test(match[0])) {
+    if (genre && !/songs? by|tracks? by/i.test(match[0]) && isUsableGenreQuotaLabel(genre)) {
       draft.noMoreFromGenres?.push(genre);
       matchedRules.add(`${scope}:genreLimits`);
     }

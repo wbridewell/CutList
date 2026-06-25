@@ -89,11 +89,11 @@ export function buildConstraintExecutionState(input: {
     userMessage,
     requestedAddCount
   } = input;
-  const deterministicPersistentConstraints = explicitDeterministicPersistentConstraints
-    ?? (normalizedIntent.raw
-      ? { ...deterministicConstraints, requiredGenreAdditions: playlist.constraints.requiredGenreAdditions ?? [] }
-      : deterministicConstraints);
-  const deterministicRequestScopedConstraints = explicitDeterministicRequestScopedConstraints ?? {};
+  const deterministicPersistentConstraints = compactConstraints(mergeConstraintLayers(
+    { ...playlist.constraints, requiredGenreAdditions: playlist.constraints.requiredGenreAdditions ?? [] },
+    explicitDeterministicPersistentConstraints ?? {}
+  ));
+  const deterministicRequestScopedConstraints = compactConstraints(explicitDeterministicRequestScopedConstraints ?? {});
   const requestScopedVerifiedKeys = new Set(Object.keys(normalizedIntent.requestScopedVerifiedRules) as Array<keyof PlaylistConstraints>);
   const requestScopedGuidanceKeys = new Set(Object.keys(normalizedIntent.requestScopedGuidance) as Array<keyof PlaylistConstraints>);
   const maySubtractDeterministicFields = hasExplicitRequestScopeLanguage(userMessage);
