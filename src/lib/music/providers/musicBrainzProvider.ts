@@ -35,7 +35,7 @@ async function fetchWithTimeout(url: string): Promise<Response> {
     return await fetch(url, {
       headers: {
         accept: "application/json",
-        "user-agent": "CutList/0.1.0 (local development)"
+        "user-agent": "CutList/0.1.5 (local development)"
       },
       signal: controller.signal
     });

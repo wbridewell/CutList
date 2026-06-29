@@ -52,7 +52,7 @@ export async function ensureDesktopMenu(): Promise<void> {
           copyright: "Will Bridewell",
           license: "MIT",
           name: "CutList",
-          version: "0.1.0",
+          version: "0.1.5",
           website: "https://github.com/wbridewell/CutList",
           websiteLabel: "GitHub"
         }
