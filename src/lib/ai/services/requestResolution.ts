@@ -1,7 +1,8 @@
 import {
   collectCuratorHeuristics,
   replacementCountForVersionCleanup,
-  scopeAdditiveVocalProfileIntent
+  scopeAdditiveVocalProfileIntent,
+  scopeAdditiveVocalProfileNormalizedIntent
 } from "@/lib/ai/services/curatorRequestIntent";
 import { buildConstraintExecutionState } from "@/lib/ai/services/constraintLifecycle";
 import { parseDeterministicRequest } from "@/lib/ai/services/deterministicRequestParser";
@@ -14,6 +15,7 @@ import { parseTrackRowsFromText } from "@/lib/playlist/io/textImport";
 import { removeAlternateTrackVersions } from "@/lib/playlist/analysis/versionCleanup";
 import { explicitlyRequestedSuppressionFingerprints } from "@/lib/playlist/candidateSuppression";
 import { normalizeText } from "@/lib/music/normalize";
+import { parseReplacementIntent } from "@/lib/playlist/requestLexing";
 import { bindDeclaredTrackPlacement, detectDeclaredTrackPlacement } from "@/lib/playlist/requestPlacement";
 import type { PlaylistConstraints, PlaylistState, ResolvedOperatorPlan, Track } from "@/types/playlist";
 import type { ConstraintExecutionState } from "@/lib/ai/services/workflowTypes";
@@ -190,6 +192,7 @@ export async function resolveCuratorRequestPlan(
   const parsedTracks = parseTrackRowsFromText(userMessage, { allowHeaderlessCommaRows: false });
   const operatorReplacementMode = options.operatorPlan?.replacementMode ?? "generic";
   const replacementTarget = options.operatorPlan?.boundEntities.replacementTarget ?? null;
+  const requestedReplacementAlbum = parseReplacementIntent(userMessage)?.requestedAlbum ?? null;
   const detectedPlacement = options.operatorPlan?.boundEntities.placement
     ?? bindDeclaredTrackPlacement(playlist, detectDeclaredTrackPlacement(userMessage));
   const heuristics = collectCuratorHeuristics(userMessage, deterministicConstraints);
@@ -229,6 +232,7 @@ export async function resolveCuratorRequestPlan(
       instructionIntentStatus: "not_attempted",
       effectiveDiscoveryRadius,
       replacementMode: operatorReplacementMode,
+      requestedReplacementAlbum,
       constraintState,
       suppressionState,
       preGenerationRemovalPlan: buildPreGenerationRemovalPlan(playlist, userMessage, constraintState.activeConstraints),
@@ -302,14 +306,23 @@ export async function resolveCuratorRequestPlan(
     );
   }
 
-  const instructionIntentResult = await parseInstructionIntentDetailed(
-    { ...playlist, constraints: deterministicConstraints },
-    userMessage,
-    options
-  );
-  const instructionIntent = scopeAdditiveVocalProfileIntent(instructionIntentResult.intent, userMessage);
+  const reusedOperatorIntent = options.operatorPlan && options.operatorPlan.instructionIntentStatus !== "not_attempted"
+    ? {
+      normalizedIntent: options.operatorPlan.normalizedIntent,
+      status: options.operatorPlan.instructionIntentStatus
+    }
+    : null;
+  const instructionIntentResult = reusedOperatorIntent
+    ? null
+    : await parseInstructionIntentDetailed(
+      { ...playlist, constraints: deterministicConstraints },
+      userMessage,
+      options
+    );
   const baseNormalizedIntent = sanitizeNormalizedIntentWithDeterministicPlan(
-    normalizeInstructionIntentLayers(instructionIntent),
+    reusedOperatorIntent
+      ? scopeAdditiveVocalProfileNormalizedIntent(reusedOperatorIntent.normalizedIntent, userMessage)
+      : normalizeInstructionIntentLayers(scopeAdditiveVocalProfileIntent(instructionIntentResult?.intent ?? null, userMessage)),
     userMessage,
     reorderClauseTexts,
     deterministicParse.matchedRules
@@ -367,9 +380,10 @@ export async function resolveCuratorRequestPlan(
     requestedAddCount,
     targetTotalTrackCount,
     replacementCount,
-    instructionIntentStatus: instructionIntentResult.status,
+    instructionIntentStatus: reusedOperatorIntent?.status ?? instructionIntentResult?.status ?? "not_attempted",
     effectiveDiscoveryRadius: heuristics.discoveryRadiusOverride ?? playlist.discoveryRadius ?? "moderate",
     replacementMode: operatorReplacementMode,
+    requestedReplacementAlbum,
     constraintState,
     suppressionState,
     preGenerationRemovalPlan,
@@ -381,10 +395,10 @@ export async function resolveCuratorRequestPlan(
       `Resolved operation: ${operation}.`,
       postOperationShape ? "Will run a shaping pass after structural edits." : "No post-edit shaping pass requested.",
       normalizedIntent.raw
-        ? instructionIntentResult.status === "success_repaired"
+        ? (reusedOperatorIntent?.status ?? instructionIntentResult?.status) === "success_repaired"
           ? `LLM intent repaired successfully: ${normalizedIntent.operationType}.`
           : `LLM intent: ${normalizedIntent.operationType}.`
-        : `No LLM intent available (${instructionIntentResult.status}).`
+        : `No LLM intent available (${reusedOperatorIntent?.status ?? instructionIntentResult?.status ?? "not_attempted"}).`
     ]
   };
 }

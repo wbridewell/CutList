@@ -74,6 +74,7 @@ function plan(playlist: PlaylistState): ResolvedCuratorRequestPlan {
     instructionIntentStatus: "success",
     effectiveDiscoveryRadius: "moderate",
     replacementMode: "generic",
+    requestedReplacementAlbum: null,
     constraintState: {
       deterministicConstraints: {},
       deterministicPersistentConstraints: {},
@@ -388,6 +389,88 @@ describe("executeCandidateGeneration", () => {
         vibeTags: [],
         expectedFitNotes: "",
         energy: null
+      },
+      undefined,
+      {
+        excludeSourceIdentity: {
+          source: "itunes",
+          sourceId: "old"
+        }
+      }
+    ]);
+    expect(result.acceptedTracks).toEqual([canonical]);
+  });
+
+  it("passes the requested album through canonical version replacement verification", async () => {
+    const existing = track({
+      id: "stagger-lee-old",
+      title: "Stagger Lee",
+      artist: "Nick Cave & the Bad Seeds",
+      album: "Live in Denmark",
+      source: "itunes",
+      sourceId: "old"
+    });
+    const canonical = track({
+      id: "stagger-lee-new",
+      title: "Stagger Lee",
+      artist: "Nick Cave & the Bad Seeds",
+      album: "Murder Ballads",
+      source: "musicbrainz",
+      sourceId: "new"
+    });
+    const playlist: PlaylistState = {
+      id: "playlist",
+      title: "Test",
+      mood: null,
+      arc: null,
+      tracks: [existing],
+      constraints: {},
+      discoveryRadius: "moderate",
+      conversationSummary: null,
+      updatedAt: "2026-06-23T00:00:00Z"
+    };
+
+    vi.mocked(verifyTrack).mockResolvedValueOnce({
+      status: "verified",
+      track: canonical
+    });
+
+    const result = await executeCandidateGeneration(
+      {
+        ...plan(playlist),
+        userMessage: "replace the version of stagger lee in the playlist with the album cut from Murder Ballads",
+        replacementMode: "canonical_version",
+        requestedReplacementAlbum: "Murder Ballads",
+        replacementTarget: {
+          query: "Stagger Lee",
+          trackId: "stagger-lee-old",
+          title: "Stagger Lee",
+          artist: "Nick Cave & the Bad Seeds",
+          resolution: "exact"
+        }
+      },
+      {},
+      {
+        baseTracks: [],
+        replacementRemovedTracks: [existing],
+        effectiveRequestedCount: 1
+      }
+    );
+
+    if ("playlistUpdate" in result) {
+      throw new Error("Expected candidate execution result, got final curator response.");
+    }
+
+    expect(vi.mocked(verifyTrack).mock.calls[0]).toMatchObject([
+      {
+        title: "Stagger Lee",
+        artist: "Nick Cave & the Bad Seeds",
+        album: "Murder Ballads"
+      },
+      {
+        title: "Stagger Lee",
+        artist: "Nick Cave & the Bad Seeds",
+        album: "Murder Ballads"
       },
       undefined,
       {

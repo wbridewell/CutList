@@ -1,7 +1,8 @@
 import { artistMatchKind, rankMatches, type ScoredMatch } from "@/lib/music/matchScore";
 import { logTiming, timeAsync } from "@/lib/debugTiming";
 import { reviewAttemptedMatchesWithLLM } from "@/lib/music/llmMatchReview";
-import { normalizedTrackKey, normalizeText, normalizeVersionlessText, tokenOverlapScore } from "@/lib/music/normalize";
+import { albumsEquivalent, titlesEquivalent } from "@/lib/music/matchSemantics";
+import { normalizedTrackKey, normalizeText, tokenOverlapScore } from "@/lib/music/normalize";
 import type { MusicMetadataProvider, TrackSearchQuery, TrackSearchResult } from "@/lib/music/providers/providerTypes";
 import { createDefaultMetadataProviders, verificationPolicy, type VerificationRejectionCode } from "@/lib/music/verificationPolicy";
 import { formatRuntime } from "@/lib/playlist/runtime";
@@ -94,19 +95,20 @@ function hasRequestedAlbumEvidence(query: TrackSearchQuery, result: TrackSearchR
     return false;
   }
 
-  return normalizeText(query.album) === normalizeText(result.album) ||
-    tokenOverlapScore(query.album, result.album) >= 0.8;
+  return albumsEquivalent(query.album, result.album);
 }
 
 function equivalentRecording(query: TrackSearchQuery, a: ScoredMatch, b: ScoredMatch): boolean {
-  const sameVersionlessTitle = normalizeVersionlessText(a.title) === normalizeVersionlessText(b.title) &&
-    normalizeVersionlessText(query.title) === normalizeVersionlessText(a.title);
+  const sameTitle = titlesEquivalent(a.title, b.title) && titlesEquivalent(query.title, a.title);
+  if (!query.artist.trim()) {
+    return sameTitle && normalizeText(a.artist) === normalizeText(b.artist);
+  }
   const aArtistKind = artistMatchKind(query.artist, a.artist);
   const bArtistKind = artistMatchKind(query.artist, b.artist);
   const compatibleArtists = (aArtistKind === "exact" || aArtistKind === "backing-band") &&
     (bArtistKind === "exact" || bArtistKind === "backing-band");
 
-  return sameVersionlessTitle && compatibleArtists;
+  return sameTitle && compatibleArtists;
 }
 
 function hasCloseDistinctAlternative(query: TrackSearchQuery, ranked: ScoredMatch[]): boolean {
@@ -185,6 +187,59 @@ function dedupeAttemptedMatches(matches: AttemptedMatch[]): AttemptedMatch[] {
     deduped.push(match);
   }
   return deduped;
+}
+
+function hasRequestedAlbumEvidenceForAttemptedMatch(query: TrackSearchQuery, match: AttemptedMatch): boolean {
+  if (!query.album) {
+    return true;
+  }
+  if (!match.album) {
+    return false;
+  }
+
+  return albumsEquivalent(query.album, match.album);
+}
+
+function attemptedMatchToTrackSearchResult(match: AttemptedMatch & { sourceId: string }): TrackSearchResult & { confidence?: "high" | "medium" | "low" } {
+  return {
+    source: match.source,
+    sourceId: match.sourceId,
+    title: match.title,
+    artist: match.artist,
+    album: match.album ?? null,
+    durationMs: match.durationMs,
+    sourceUrl: match.sourceUrl ?? null,
+    isrcs: match.isrcs,
+    artworkUrl: match.artworkUrl ?? null,
+    explicit: match.explicit ?? null,
+    releaseDate: match.releaseDate ?? null,
+    primaryGenreName: match.primaryGenreName ?? null,
+    confidence: match.confidence
+  };
+}
+
+function verifiedTrackFromReviewedMatch(
+  query: TrackSearchQuery,
+  reviewedMatches: AttemptedMatch[],
+  candidate?: CandidateTrack
+): Track | null {
+  if (reviewedMatches.length !== 1) {
+    return null;
+  }
+
+  const [match] = reviewedMatches;
+  if (!match.sourceId || match.score == null || match.score < verificationPolicy.ambiguousScore) {
+    return null;
+  }
+  if (!hasRequestedAlbumEvidenceForAttemptedMatch(query, match)) {
+    return null;
+  }
+
+  return toTrack(
+    attemptedMatchToTrackSearchResult(match as AttemptedMatch & { sourceId: string }),
+    candidate,
+    `Verified by ${match.source} after pruning obvious non-matches during metadata review.`
+  );
 }
 
 async function verifyTrackOnce(
@@ -266,6 +321,16 @@ export async function verifyTrack(
         candidate
       })
       : null;
+
+    const reviewedTrack = llmReview
+      ? verifiedTrackFromReviewedMatch(query, llmReview.attemptedMatches, candidate)
+      : null;
+    if (reviewedTrack) {
+      return {
+        status: "verified",
+        track: reviewedTrack
+      };
+    }
 
     return {
       status: "rejected",

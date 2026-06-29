@@ -2,9 +2,9 @@ import {
   hasDiscouragedVersionTerms,
   normalizeArtist,
   normalizeText,
-  normalizeVersionlessText,
   tokenOverlapScore
 } from "@/lib/music/normalize";
+import { albumsEquivalent, compareTitles } from "@/lib/music/matchSemantics";
 import { verificationPolicy, type MatchConfidence } from "@/lib/music/verificationPolicy";
 import type { TrackSearchQuery, TrackSearchResult } from "@/lib/music/providers/providerTypes";
 
@@ -71,19 +71,25 @@ function hasRiskyAttribution(result: TrackSearchResult): boolean {
 }
 
 export function scoreTrackMatch(query: TrackSearchQuery, result: TrackSearchResult): number {
-  const exactTitle = normalizeText(query.title) === normalizeText(result.title) ? 1 : 0;
-  const versionlessTitle = normalizeVersionlessText(query.title) === normalizeVersionlessText(result.title) ? 0.96 : 0;
-  const artistKind = artistMatchKind(query.artist, result.artist);
-  const titleScore = Math.max(exactTitle, versionlessTitle, tokenOverlapScore(query.title, result.title));
-  const artistScore = artistScoreFor(artistKind, query.artist, result.artist);
+  const titleComparison = compareTitles(query.title, result.title);
+  const exactTitle = titleComparison.exact ? 1 : 0;
+  const looseTitle = titleComparison.loose ? 0.99 : 0;
+  const versionlessTitle = titleComparison.versionless ? 0.96 : 0;
+  const hasArtistQuery = normalizeArtist(query.artist).length > 0;
+  const artistKind = hasArtistQuery ? artistMatchKind(query.artist, result.artist) : "weak";
+  const titleScore = Math.max(exactTitle, looseTitle, versionlessTitle, tokenOverlapScore(query.title, result.title));
+  const artistScore = hasArtistQuery ? artistScoreFor(artistKind, query.artist, result.artist) : 0.6;
   const albumScore = query.album && result.album ? tokenOverlapScore(query.album, result.album) : 0.55;
-  const albumBoost = query.album && result.album && normalizeText(query.album) === normalizeText(result.album) ? 0.06 : 0;
-  const canonicalBoost = exactTitle && artistKind === "exact" ? 0.03 : 0;
-  const backingBandBoost = exactTitle && artistKind === "backing-band" ? 0.02 : 0;
+  const albumBoost = query.album && result.album && albumsEquivalent(query.album, result.album) ? 0.06 : 0;
+  const canonicalBoost = (exactTitle || looseTitle > 0) && artistKind === "exact" ? 0.03 : 0;
+  const backingBandBoost = (exactTitle || looseTitle > 0) && artistKind === "backing-band" ? 0.02 : 0;
   const versionPenalty = hasRiskyAttribution(result) ? 0.18 : 0;
   const providerBoost = result.source === "musicbrainz" && query.album ? 0.02 : 0;
+  const score = hasArtistQuery
+    ? titleScore * 0.5 + artistScore * 0.38 + albumScore * 0.1 + albumBoost + canonicalBoost + backingBandBoost + providerBoost - versionPenalty
+    : titleScore * 0.82 + albumScore * 0.12 + albumBoost + providerBoost - versionPenalty;
 
-  return Math.max(0, Math.min(1, titleScore * 0.5 + artistScore * 0.38 + albumScore * 0.1 + albumBoost + canonicalBoost + backingBandBoost + providerBoost - versionPenalty));
+  return Math.max(0, Math.min(1, score));
 }
 
 export function rankMatches(query: TrackSearchQuery, results: TrackSearchResult[]): ScoredMatch[] {

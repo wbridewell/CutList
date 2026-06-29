@@ -1,5 +1,21 @@
 import { parseDiscoveryRadiusOverride } from "@/lib/playlist/discoveryRadius";
 import type { ParsedTrackLine } from "@/lib/playlist/io/textImport";
+import {
+  containsAddIntent,
+  containsAnalyzeIntent,
+  containsExplicitReorderIntent,
+  containsRemoveIntent,
+  containsReplaceIntent,
+  inferLexedClauseOperations,
+  isPlainConversationalMessage,
+  normalizeClauseText,
+  parsePlacementSubjectQuery,
+  parseReplacementCount,
+  parseRequestedTrackCount,
+  parseShapeIntentStrength,
+  parseTargetTotalTrackCount,
+  splitOrderedClauses
+} from "@/lib/playlist/requestLexing";
 import type { DiscoveryRadius, PlaylistConstraints } from "@/types/playlist";
 
 const NUMBER_WORDS: Record<string, number> = {
@@ -89,15 +105,6 @@ function parseNumber(value: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function parseRequestedTrackCount(userMessage: string): number | null {
-  const match = userMessage.match(/\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:\w+\s+){0,3}(?:songs?|tracks?)\b/i);
-  if (!match) {
-    return null;
-  }
-  const value = parseNumber(match[1]);
-  return value != null ? Math.min(Math.max(value, 1), 20) : null;
-}
-
 function toDurationMs(value: string, unit: string): number {
   const numeric = Number.parseFloat(value);
   if (unit.startsWith("second")) {
@@ -148,40 +155,6 @@ function looksLikeRequestedCountPlaceholder(value: string): boolean {
   return /^(?:a|an|one|two|three|four|five|six|seven|eight|nine|ten|\d+|some|few|couple)\s+(?:more\s+)?(?:songs?|tracks?)$/i.test(value.trim());
 }
 
-function normalizeClauseText(text: string): string {
-  return text.replace(/\s+/g, " ").trim();
-}
-
-function trimClause(text: string): string {
-  return text.replace(/^[,\s]+|[,\s]+$/g, "").trim();
-}
-
-const clauseSplitPattern = /\b(?:and then|then|after that|afterward|afterwards|once that's done|once that is done|once done|finally)\b|[.;\n]+/i;
-
-function splitOrderedClauses(userMessage: string): DeterministicClause[] {
-  const clauses: DeterministicClause[] = [];
-  let remaining = userMessage;
-
-  while (remaining.length > 0) {
-    const match = remaining.match(clauseSplitPattern);
-    if (!match || match.index == null) {
-      const text = trimClause(remaining);
-      if (text) {
-        clauses.push({ text, sourceOrder: clauses.length, operations: [] });
-      }
-      break;
-    }
-
-    const before = trimClause(remaining.slice(0, match.index));
-    if (before) {
-      clauses.push({ text: before, sourceOrder: clauses.length, operations: [] });
-    }
-    remaining = remaining.slice(match.index + match[0].length);
-  }
-
-  return clauses.length > 0 ? clauses : [{ text: userMessage.trim(), sourceOrder: 0, operations: [] }];
-}
-
 function isConstraintDeclaration(userMessage: string): boolean {
   return /\badd(?:ing)?\s+(?:a\s+)?(?:constraint|rule)\b/i.test(userMessage) ||
     /\b(?:make|set)\s+(?:a\s+)?(?:constraint|rule)\b/i.test(userMessage);
@@ -189,40 +162,6 @@ function isConstraintDeclaration(userMessage: string): boolean {
 
 function isEditSuggestionRequest(userMessage: string): boolean {
   return /\bsuggest\s+(?:cuts?|removals?|deletions?|drops?|edits?)\b/i.test(userMessage);
-}
-
-function parseShapeIntentStrength(userMessage: string): DeterministicShapeIntentStrength {
-  const matchesShape = /\b(re-?order|reorganize|resequence|sequence|sequencing|flow|arc|act|acts|transition|transitions|group|cluster|arrange|rearrange|pace|pacing|energy curve|journey|narrative|retitle|title|name|describe|description|separate)\b/i.test(userMessage);
-  if (!matchesShape) {
-    return "none";
-  }
-  return /\b(re-?order|reorganize|resequence|sequence|sequencing|retitle|title|name|describe|description|separate|rearrange)\b/i.test(userMessage) ? "strong" : "advisory";
-}
-
-function parseTargetTotalTrackCount(userMessage: string): number | null {
-  const match = userMessage.match(/\b(?:fill|round|bring|build|pump|extend|grow).{0,40}\b(?:to|out to|up to)\s*(\d+)\s*(?:total\s*)?(?:songs?|tracks?)?\b/i)
-    ?? userMessage.match(/\b(?:to|at)\s*(\d+)\s*total\s*(?:songs?|tracks?)?\b/i)
-    ?? userMessage.match(/\btotal\s+(?:of\s+)?(\d+)\s*(?:songs?|tracks?)\b/i);
-  if (!match) {
-    return null;
-  }
-  const value = Number.parseInt(match[1], 10);
-  return Number.isFinite(value) ? Math.min(Math.max(value, 1), 20) : null;
-}
-
-function parseReplacementCount(userMessage: string): number | null {
-  const explicit = userMessage.match(/\b(?:replace|swap out|swap|substitute)\b(?:\s+\w+){0,6}?\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:\w+\s+){0,3}(?:songs?|tracks?)\b/i)
-    ?? userMessage.match(/\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:\w+\s+){0,3}(?:songs?|tracks?)\s+\b(?:to|for)\s+\breplace\b/i)
-    ?? userMessage.match(/\b(?:replace|swap out|swap|substitute)\b\s+the\s+weakest\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\b/i);
-  if (explicit) {
-    return parseRequestedTrackCount(`${explicit[1]} tracks`);
-  }
-
-  if (/\bthe opener\b/i.test(userMessage) || /\bthe closer\b/i.test(userMessage) || /\bweakest\b/i.test(userMessage)) {
-    return 1;
-  }
-
-  return null;
 }
 
 function hasConstraintCleanupLanguage(userMessage: string): boolean {
@@ -259,7 +198,7 @@ export function parseExplicitRequestedTracks(text: string): ParsedTrackLine[] {
 
 function parseExplicitRequestedTrackClause(text: string): ParsedTrackLine[] {
   const normalized = normalizeClauseText(text);
-  if (!normalized || isConstraintDeclaration(normalized) || !/^add\b/i.test(normalized)) {
+  if (!normalized || isConstraintDeclaration(normalized) || !containsAddIntent(normalized)) {
     return [];
   }
 
@@ -289,84 +228,16 @@ function parseExplicitRequestedTrackClause(text: string): ParsedTrackLine[] {
     }
   }
 
+  const placementSubject = parsePlacementSubjectQuery(normalized);
+  if (placementSubject && !looksLikeRequestedCountPlaceholder(placementSubject)) {
+    return [{ title: placementSubject, artist: "", album: null }];
+  }
+
   return [];
 }
 
-function containsAddIntent(text: string): boolean {
-  if (/\b(?:too|bit|little)\s+hard\s+to\s+find\b/i.test(text) || /\beasier\s+to\s+find\b/i.test(text)) {
-    return false;
-  }
-  if (/\b(?:without\b(?:.{0,40})?\badd(?:ing)?|not\s+add(?:ing)?|don't\s+add|do not\s+add|never\s+add)\b/i.test(text)) {
-    return false;
-  }
-  return !isConstraintDeclaration(text) &&
-    !isEditSuggestionRequest(text) && (
-      /\b(?:add|adding|find|give me|recommend|suggest|fill|round out|build|pump|extend|grow)\b/i.test(text) ||
-      /\bbring\b.{0,30}\b(?:to|up to)\s*\d+/i.test(text)
-    );
-}
-
-function containsReplaceIntent(text: string): boolean {
-  return /\b(replace|replacing|replacement|replacements|swap out|swap|trade out|substitute)\b/i.test(text);
-}
-
-function containsRemoveIntent(text: string): boolean {
-  if (/\b(?:without\b(?:.{0,40})?\bremov(?:e|ing)|not\s+remov(?:e|ing)|don't\s+remove|do not\s+remove|never\s+remove)\b/i.test(text)) {
-    return false;
-  }
-  return /\b(remove|removing|delete|drop|cut|cuts|prune|clear|trim)\b/i.test(text) || /\bget rid of\b/i.test(text);
-}
-
-function containsAnalyzeIntent(text: string): boolean {
-  return /\b(review|analy[sz]e|critique|what(?:'s| is) working|what should happen next)\b/i.test(text);
-}
-
-function containsExplicitReorderIntent(text: string): boolean {
-  return /\b(re-?order|reorganize|resequence|sequence|sequencing|arrange|rearrange|spread out|separate|cluster|group|move .*?(?:earlier|later|around))\b/i.test(text);
-}
-
 function inferClauseOperations(clause: string): DeterministicOperationKind[] {
-  const matches: Array<{ index: number; kind: DeterministicOperationKind }> = [];
-  const patterns: Array<[DeterministicOperationKind, RegExp]> = [
-    ["analyze", /\b(review|analy[sz]e|critique|what(?:'s| is) working|what should happen next)\b/i],
-    ["replace", /\b(replace|replacing|replacement|replacements|swap out|swap|trade out|substitute)\b/i],
-    ["remove", /\b(remove|removing|delete|drop|cut|cuts|prune|clear|trim|get rid of)\b/i],
-    ["add", /\b(?:add|adding|find|give me|recommend|suggest|fill|round out|build|pump|extend|grow)\b/i],
-    ["reorder", /\b(re-?order|reorganize|resequence|sequence|sequencing|arrange|rearrange|spread out|separate|cluster|group|move .*?(?:earlier|later|around))\b/i]
-  ];
-
-  for (const [kind, pattern] of patterns) {
-    if (kind === "add" && !containsAddIntent(clause)) {
-      continue;
-    }
-    if (kind === "remove" && !containsRemoveIntent(clause)) {
-      continue;
-    }
-    if (kind === "replace" && !containsReplaceIntent(clause)) {
-      continue;
-    }
-    if (kind === "reorder" && !containsExplicitReorderIntent(clause)) {
-      continue;
-    }
-    if (kind === "analyze" && !containsAnalyzeIntent(clause)) {
-      continue;
-    }
-    const match = clause.match(pattern);
-    if (match?.index != null) {
-      matches.push({ index: match.index, kind });
-    }
-  }
-
-  const ordered = matches
-    .sort((first, second) => first.index - second.index)
-    .filter((item, index, items) => items.findIndex((other) => other.kind === item.kind) === index)
-    .map((item) => item.kind);
-
-  if (ordered.includes("replace")) {
-    return ordered.filter((kind) => kind !== "remove" && kind !== "add");
-  }
-
-  return ordered;
+  return inferLexedClauseOperations(clause) as DeterministicOperationKind[];
 }
 
 function emptyConstraintDraft(base: PlaylistConstraints = {}): PlaylistConstraints {
@@ -677,7 +548,7 @@ export function parseDeterministicRequest(
 
   const constraintsForPruning = deterministicConstraints;
   const cleanupSignals = {
-    conversationalOnly: /^(?:hi|hello|hey|yo|sup|thanks|thank you|ok|okay)[\s!.?]*$/i.test(normalizedMessage),
+    conversationalOnly: isPlainConversationalMessage(normalizedMessage),
     versionCleanup: /\b(version|versions|alternate|alternates|duplicate|duplicates|same track)\b/i.test(userMessage) &&
       /\b(keep|best|remove|replace|replacements)\b/i.test(userMessage),
     shouldPruneExistingForConstraints: constraintsForPruning.maxTracksPerArtist != null &&

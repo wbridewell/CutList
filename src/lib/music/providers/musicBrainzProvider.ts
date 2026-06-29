@@ -94,7 +94,10 @@ export class MusicBrainzProvider implements MusicMetadataProvider {
   name = "musicbrainz" as const;
 
   async searchTrack(query: TrackSearchQuery): Promise<TrackSearchResult[]> {
-    const search = [`recording:${quoted(query.title)}`, `artist:${quoted(query.artist)}`];
+    const search = [`recording:${quoted(query.title)}`];
+    if (query.artist.trim()) {
+      search.push(`artist:${quoted(query.artist)}`);
+    }
     if (query.album) {
       search.push(`release:${quoted(query.album)}`);
     }

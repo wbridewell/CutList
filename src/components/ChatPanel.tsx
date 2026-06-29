@@ -571,7 +571,7 @@ export function ChatPanel({
     }
     const outgoing = userMessage;
     const requestId = reviewRoutingRequestId();
-    setUserMessage("");
+    let shouldClearUserMessage = false;
     setBusy(true);
     try {
       const requestPlan = await planPlaylistRequest(
@@ -593,6 +593,7 @@ export function ChatPanel({
         const reviewPrompt = requestPlan.operationPlan.reviewPrompt ?? reviewPromptForComposerRequest(outgoing);
         const requestMessages = createRequestMessageList(messages, reviewRequestLabel(reviewPrompt));
         onMessagesChange(requestMessages);
+        shouldClearUserMessage = true;
         const result = await runAnalyzeWorkflow({
           playlist: playlistForComposer,
           requestId,
@@ -608,6 +609,7 @@ export function ChatPanel({
         autoOpenIssuesRef.current = true;
         const requestMessages = createRequestMessageList(messages, outgoing);
         onMessagesChange(requestMessages);
+        shouldClearUserMessage = true;
         const result = await runImportWorkflow({ playlist, importText: outgoing });
         applyWorkflowResult(result);
         return;
@@ -617,6 +619,7 @@ export function ChatPanel({
         autoOpenIssuesRef.current = true;
         const requestMessages = createRequestMessageList(messages, outgoing);
         onMessagesChange(requestMessages);
+        shouldClearUserMessage = true;
         setProgressStatus("Starting mixed review and curator request.");
         const controller = new AbortController();
         setActiveController(controller);
@@ -644,9 +647,13 @@ export function ChatPanel({
         return;
       }
 
+      shouldClearUserMessage = true;
       await submitCuratorRequest(outgoing, "Starting request.", { requestId });
     } finally {
       setBusy(false);
+      if (shouldClearUserMessage) {
+        setUserMessage("");
+      }
     }
   }
 

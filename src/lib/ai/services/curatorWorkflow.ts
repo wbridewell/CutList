@@ -11,6 +11,9 @@ import { getLLMProvider } from "@/lib/ai/llmClient";
 import type { CuratorRunOptions } from "@/lib/ai/curatorTypes";
 import { evaluatePlaylistConstraints } from "@/lib/playlist/constraints";
 import { applyPlaylistUpdateTracks } from "@/lib/playlist/operations";
+import { resolveNamedTrack } from "@/lib/playlist/requestPlacement";
+import { parsePlacementSubjectQuery } from "@/lib/playlist/requestLexing";
+import { moveTrackAfterTrack, moveTrackBeforeTrack } from "@/lib/playlist/state";
 import type { CuratorResponse, PlaylistConstraints, PlaylistState, Track } from "@/types/playlist";
 import type {
   CuratorPlannedStep,
@@ -154,10 +157,92 @@ function buildStepPlan(
     constraintState: buildStepConstraintState(plan.constraintState, playlistWithConstraints, context.activeConstraints, context.persistedConstraints),
     preGenerationRemovalPlan: buildPreGenerationRemovalPlan(playlistWithConstraints, step.originText, context.activeConstraints),
     replacementMode: plan.replacementMode,
+    requestedReplacementAlbum: plan.requestedReplacementAlbum,
     replacementTarget: plan.replacementTarget,
-    addPlacement: step.kind === "add" ? plan.addPlacement : null,
+    addPlacement: step.kind === "add" || step.kind === "reorder" ? plan.addPlacement : null,
     steps: [step],
     explicitTrackRequests: plan.explicitTrackRequests
+  };
+}
+
+function handleDirectedPlacementReorder(stepPlan: ResolvedCuratorRequestPlan): CuratorResponse | null {
+  const placement = stepPlan.addPlacement;
+  if (!placement) {
+    return null;
+  }
+
+  const subjectQuery = parsePlacementSubjectQuery(stepPlan.userMessage);
+  if (!subjectQuery) {
+    return null;
+  }
+
+  const subject = resolveNamedTrack(stepPlan.playlist, subjectQuery);
+  if (!subject.trackId || (subject.resolution !== "exact" && subject.resolution !== "fuzzy")) {
+    return null;
+  }
+
+  if ((placement.mode === "after_track" || placement.mode === "before_track") && !placement.anchorTrackId) {
+    const qualifier = placement.anchorQuery ?? "that track";
+    const detail = placement.resolution === "ambiguous"
+      ? `I found more than one possible match for "${qualifier}", so I did not guess where to move ${subject.artist} - ${subject.title}.`
+      : `I could not find "${qualifier}" in the playlist, so I did not move ${subject.artist} - ${subject.title}.`;
+    return {
+      message: detail,
+      playlistUpdate: null,
+      playlistMeta: null,
+      updatedConstraints: stepPlan.constraintState.persistedConstraintsAfterSuccess,
+      constraintReport: evaluatePlaylistConstraints(stepPlan.playlist.tracks, stepPlan.constraintState.activeConstraints),
+      rejectedCandidates: []
+    };
+  }
+
+  const movedTracks = placement.mode === "after_track" && placement.anchorTrackId
+    ? moveTrackAfterTrack(stepPlan.playlist, subject.trackId, placement.anchorTrackId).tracks
+    : placement.mode === "before_track" && placement.anchorTrackId
+      ? moveTrackBeforeTrack(stepPlan.playlist, subject.trackId, placement.anchorTrackId).tracks
+      : placement.mode === "prepend"
+        ? [
+          stepPlan.playlist.tracks.find((track) => track.id === subject.trackId)!,
+          ...stepPlan.playlist.tracks.filter((track) => track.id !== subject.trackId)
+        ]
+        : placement.mode === "append"
+          ? [
+            ...stepPlan.playlist.tracks.filter((track) => track.id !== subject.trackId),
+            stepPlan.playlist.tracks.find((track) => track.id === subject.trackId)!
+          ]
+      : null;
+
+  if (!movedTracks) {
+    return null;
+  }
+
+  const relation = placement.mode === "after_track"
+    ? "after"
+    : placement.mode === "before_track"
+      ? "before"
+      : placement.mode === "prepend"
+        ? "at the beginning of"
+        : placement.mode === "append"
+          ? "at the end of"
+          : null;
+  const anchorLabel = placement.mode === "prepend" || placement.mode === "append"
+    ? "the playlist"
+    : placement.anchorLabel ?? placement.anchorQuery ?? "that track";
+  return {
+    message: relation
+      ? `Moved ${subject.artist} - ${subject.title} ${relation} ${anchorLabel}.`
+      : `Moved ${subject.artist} - ${subject.title}.`,
+    playlistUpdate: {
+      action: "reorder",
+      tracks: movedTracks,
+      orderRationale: relation
+        ? `Placed ${subject.artist} - ${subject.title} ${relation} ${anchorLabel}.`
+        : `Moved ${subject.artist} - ${subject.title}.`
+    },
+    playlistMeta: null,
+    updatedConstraints: stepPlan.constraintState.persistedConstraintsAfterSuccess,
+    constraintReport: evaluatePlaylistConstraints(movedTracks, stepPlan.constraintState.activeConstraints),
+    rejectedCandidates: []
   };
 }
 
@@ -487,11 +572,12 @@ export async function executeResolvedCuratorPlan(
           break;
         }
         case "reorder":
-          response = await handlePlaylistShapeRequest(
-            { ...context.playlist, constraints: context.activeConstraints },
-            step.originText,
-            options
-          );
+          response = handleDirectedPlacementReorder(stepPlan)
+            ?? await handlePlaylistShapeRequest(
+              { ...context.playlist, constraints: context.activeConstraints },
+              step.originText,
+              options
+            );
           break;
         case "import":
           response = await handlePastedTracks(stepPlan, options);

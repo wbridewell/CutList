@@ -5,6 +5,8 @@ import {
   insertTracksAfterTrack,
   insertTracksBeforeTrack,
   isDuplicateTrack,
+  moveTrackAfterTrack,
+  moveTrackBeforeTrack,
   moveTrackInPlaylist,
   removePlaylistConstraint,
   removeTrackFromPlaylist,
@@ -124,6 +126,15 @@ describe("playlist state operations", () => {
     expect(reordered.updatedAt).toBe("reordered");
     expect(reorderTrackInPlaylist(reordered, 0, 0)).toBe(reordered);
     expect(reorderTrackInPlaylist(reordered, -1, 1)).toBe(reordered);
+
+    const withThird = { ...playlist, tracks: [trackA, trackB, { ...trackB, id: "itunes:5", title: "Song C", sourceId: "5" }] };
+    const movedAfter = moveTrackAfterTrack(withThird, trackA.id, "itunes:5", "after-track");
+    expect(movedAfter.tracks.map((track) => track.title)).toEqual(["Song B", "Song C", "Song A"]);
+    expect(movedAfter.updatedAt).toBe("after-track");
+
+    const movedBefore = moveTrackBeforeTrack(withThird, "itunes:5", trackA.id, "before-track");
+    expect(movedBefore.tracks.map((track) => track.title)).toEqual(["Song C", "Song A", "Song B"]);
+    expect(movedBefore.updatedAt).toBe("before-track");
 
     const removed = removeTrackFromPlaylist(moved, trackB.id, "removed");
     expect(removed.tracks).toEqual([trackA]);

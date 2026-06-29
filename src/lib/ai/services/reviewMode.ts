@@ -1,6 +1,7 @@
 import { parseCompressionRequest } from "@/lib/playlist/analysis/compression";
 import type { CuratorRunOptions } from "@/lib/ai/curatorTypes";
 import { parseInstructionIntentDetailed } from "@/lib/ai/services/instructionIntent";
+import { hasNonModificationDirective, hasSequencingReviewCue } from "@/lib/playlist/requestLexing";
 import type { PlaylistState, ReviewMode } from "@/types/playlist";
 
 function hasFocusedTransitionRepairSignals(userMessage: string): boolean {
@@ -32,8 +33,7 @@ function hasEndingRepairSignals(userMessage: string): boolean {
 
 function hasSequencingOnlySignals(userMessage: string): boolean {
   return /\b(?:sequencing only|sequence only|reorder only|resequence only)\b/i.test(userMessage) ||
-    (/\b(re-?order|resequence|sequence|flow|arc|transitions?)\b/i.test(userMessage) &&
-      /\b(?:do not|don't|dont|without)\b.{0,40}\b(?:modify|change|edit|reorder|remove|add|replace|cut)\b/i.test(userMessage)) ||
+    (hasSequencingReviewCue(userMessage) && hasNonModificationDirective(userMessage)) ||
     /\b(?:review|analy[sz]e|critique)\b.{0,50}\b(?:sequencing|transitions?|flow|arc)\b/i.test(userMessage);
 }
 

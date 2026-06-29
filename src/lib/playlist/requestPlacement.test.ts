@@ -42,4 +42,18 @@ describe("resolveNamedTrack", () => {
       resolution: "exact"
     });
   });
+
+  it("treats loose title variants as the same playlist track", () => {
+    expect(resolveNamedTrack({
+      ...playlist,
+      tracks: [{
+        ...playlist.tracks[0],
+        title: "The Days of Swine & Roses",
+        artist: "My Life with the Thrill Kill Kult"
+      }]
+    }, "Days of Swine and Roses")).toMatchObject({
+      trackId: "itunes:264135997",
+      resolution: "exact"
+    });
+  });
 });

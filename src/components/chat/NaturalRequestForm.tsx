@@ -126,7 +126,13 @@ export function NaturalRequestForm({
       </div>
       <label className="field">
         <span>{playlistHasTracks ? "Instruction" : "Describe playlist"}</span>
-        <textarea rows={4} value={userMessage} onChange={(event) => onUserMessageChange(event.target.value)} placeholder={placeholder} />
+        <textarea
+          disabled={busy}
+          rows={4}
+          value={userMessage}
+          onChange={(event) => onUserMessageChange(event.target.value)}
+          placeholder={placeholder}
+        />
       </label>
       <details className="reorder-guidance prompt-examples discovery-radius-disclosure" aria-label="Discovery radius">
         <summary>

@@ -161,6 +161,34 @@ describe("curator LLM boundaries", () => {
     expect(getJsonFromLLM).not.toHaveBeenCalled();
   });
 
+  it("treats album tracklist questions as unsupported read-only catalog queries", async () => {
+    const result = await handlePlaylistMessage(
+      playlist,
+      "What songs are on Confessions of a Knife by My Life with the Thrill Kill Kult?"
+    );
+
+    expect(result.message).toContain("can't safely list an album's tracklist");
+    expect(result.playlistUpdate).toBeNull();
+    expect(vi.mocked(resolveOperatorPlan)).not.toHaveBeenCalled();
+    expect(verifyTrack).not.toHaveBeenCalled();
+    expect(verifyTracks).not.toHaveBeenCalled();
+    expect(getJsonFromLLM).not.toHaveBeenCalled();
+  });
+
+  it("treats artist song-list questions as unsupported read-only catalog queries", async () => {
+    const result = await handlePlaylistMessage(
+      playlist,
+      "List songs by Bjork"
+    );
+
+    expect(result.message).toContain("can't safely list an artist's songs");
+    expect(result.playlistUpdate).toBeNull();
+    expect(vi.mocked(resolveOperatorPlan)).not.toHaveBeenCalled();
+    expect(verifyTrack).not.toHaveBeenCalled();
+    expect(verifyTracks).not.toHaveBeenCalled();
+    expect(getJsonFromLLM).not.toHaveBeenCalled();
+  });
+
   it("does not treat comma-separated version cleanup prose as pasted tracks", async () => {
     const original = acceptedTrack("track-1", "Schism", "Tool");
     const live = { ...acceptedTrack("track-2", "Schism (Live)", "Tool"), album: "Live" };
@@ -216,6 +244,95 @@ describe("curator LLM boundaries", () => {
     expect(result.message).not.toContain("detected a pasted track list");
     expect(verifyTracks).not.toHaveBeenCalled();
     expect(getJsonFromLLM).toHaveBeenCalled();
+  });
+
+  it("moves an existing queued track directly instead of sending the request through sequencing", async () => {
+    const firestarter = acceptedTrack("track-firestarter", "Firestarter", "The Prodigy");
+    const roads = acceptedTrack("track-roads", "Roads", "Portishead");
+    const army = acceptedTrack("track-army", "Army of Me", "Bjork");
+
+    const result = await handlePlaylistMessage(
+      { ...playlist, tracks: [firestarter, roads, army] },
+      "queue army of me after firestarter"
+    );
+
+    expect(result.message).toContain("Moved Bjork - Army of Me after The Prodigy - Firestarter.");
+    expect(result.playlistUpdate?.action).toBe("reorder");
+    expect(result.playlistUpdate?.tracks.map((track) => track.title)).toEqual(["Firestarter", "Army of Me", "Roads"]);
+    expect(getJsonFromLLM).not.toHaveBeenCalled();
+    expect(verifyTrack).not.toHaveBeenCalled();
+  });
+
+  it("verifies a missing queued track directly instead of sending the request through generic generation", async () => {
+    const firestarter = acceptedTrack("track-firestarter", "Firestarter", "The Prodigy");
+    const roads = acceptedTrack("track-roads", "Roads", "Portishead");
+    const army = acceptedTrack("track-army", "Army of Me", "Bjork");
+    vi.mocked(verifyTrack).mockResolvedValueOnce({
+      status: "verified",
+      track: army
+    });
+
+    const result = await handlePlaylistMessage(
+      { ...playlist, tracks: [firestarter, roads] },
+      "queue army of me after firestarter"
+    );
+
+    expect(verifyTrack).toHaveBeenCalledWith({ title: "army of me", artist: "", album: null });
+    expect(result.playlistUpdate?.action).toBe("set");
+    expect(result.playlistUpdate?.tracks.map((track) => track.title)).toEqual(["Firestarter", "Army of Me", "Roads"]);
+    expect(result.message).toContain("I verified and accepted 1 track");
+    expect(getJsonFromLLM).not.toHaveBeenCalled();
+  });
+
+  it("moves an existing apostrophe-containing title instead of falling back to additions", async () => {
+    const bela = acceptedTrack("track-bela", "Bela Lugosi's Dead", "Bauhaus");
+    const roads = acceptedTrack("track-roads", "Roads", "Portishead");
+    const firestarter = acceptedTrack("track-firestarter", "Firestarter", "The Prodigy");
+
+    const result = await handlePlaylistMessage(
+      { ...playlist, tracks: [firestarter, roads, bela] },
+      "put bela lugosi's dead before roads"
+    );
+
+    expect(result.message).toContain("Moved Bauhaus - Bela Lugosi's Dead before Portishead - Roads.");
+    expect(result.playlistUpdate?.action).toBe("reorder");
+    expect(result.playlistUpdate?.tracks.map((track) => track.title)).toEqual(["Firestarter", "Bela Lugosi's Dead", "Roads"]);
+    expect(getJsonFromLLM).not.toHaveBeenCalled();
+    expect(verifyTrack).not.toHaveBeenCalled();
+  });
+
+  it("does not treat 'drop in' as a removal cue when moving an existing track", async () => {
+    const bela = acceptedTrack("track-bela", "Bela Lugosi's Dead", "Bauhaus");
+    const roads = acceptedTrack("track-roads", "Roads", "Portishead");
+    const firestarter = acceptedTrack("track-firestarter", "Firestarter", "The Prodigy");
+
+    const result = await handlePlaylistMessage(
+      { ...playlist, tracks: [firestarter, roads, bela] },
+      "drop in bela lugosi's dead before roads"
+    );
+
+    expect(result.playlistUpdate?.action).toBe("reorder");
+    expect(result.playlistUpdate?.tracks.map((track) => track.title)).toEqual(["Firestarter", "Bela Lugosi's Dead", "Roads"]);
+    expect(result.message).toContain("Moved Bauhaus - Bela Lugosi's Dead before Portishead - Roads.");
+    expect(getJsonFromLLM).not.toHaveBeenCalled();
+    expect(verifyTrack).not.toHaveBeenCalled();
+  });
+
+  it("moves an existing track to the beginning for prepend placement", async () => {
+    const firestarter = acceptedTrack("track-firestarter", "Firestarter", "The Prodigy");
+    const roads = acceptedTrack("track-roads", "Roads", "Portishead");
+    const black = acceptedTrack("track-black", "Black No. 1", "Type O Negative");
+
+    const result = await handlePlaylistMessage(
+      { ...playlist, tracks: [firestarter, roads, black] },
+      "Put Black No. 1 at the beginning."
+    );
+
+    expect(result.playlistUpdate?.action).toBe("reorder");
+    expect(result.playlistUpdate?.tracks.map((track) => track.title)).toEqual(["Black No. 1", "Firestarter", "Roads"]);
+    expect(result.message).toContain("Moved Type O Negative - Black No. 1 at the beginning of the playlist.");
+    expect(getJsonFromLLM).not.toHaveBeenCalled();
+    expect(verifyTrack).not.toHaveBeenCalled();
   });
 
   it("routes replace requests through removal selection and verified backfill", async () => {

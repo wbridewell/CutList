@@ -39,6 +39,30 @@ function isStrictReorderOnlyRequest(userMessage: string): boolean {
   return hasReorderIntent && forbidsStructuralChanges;
 }
 
+function detectUnsupportedCatalogQuery(userMessage: string): "album_tracks" | "artist_songs" | null {
+  const normalized = userMessage.trim();
+  if (
+    /^(?:what|which)\s+(?:songs|tracks)\s+are\s+on\s+.+/i.test(normalized) ||
+    /^list\s+(?:the\s+)?(?:songs|tracks)\s+on\s+.+/i.test(normalized)
+  ) {
+    return "album_tracks";
+  }
+  if (
+    /^(?:what|which)\s+(?:songs|tracks)\s+by\s+.+/i.test(normalized) ||
+    /^list\s+(?:the\s+)?(?:songs|tracks)\s+by\s+.+/i.test(normalized)
+  ) {
+    return "artist_songs";
+  }
+  return null;
+}
+
+function unsupportedCatalogQueryMessage(queryType: "album_tracks" | "artist_songs"): string {
+  if (queryType === "album_tracks") {
+    return "I can verify tracks and edit the playlist, but I can't safely list an album's tracklist from the current metadata path. Ask me to add a specific song from that album instead.";
+  }
+  return "I can verify tracks and edit the playlist, but I can't safely list an artist's songs from the current metadata path. Ask me to add a specific song instead.";
+}
+
 export async function handlePlaylistMessage(
   playlist: PlaylistState,
   userMessage: string,
@@ -49,6 +73,21 @@ export async function handlePlaylistMessage(
     userMessage,
     trackCount: playlist.tracks.length
   });
+  const unsupportedCatalogQuery = detectUnsupportedCatalogQuery(userMessage);
+  if (unsupportedCatalogQuery) {
+    emitReviewRoutingTrace("backend.handlePlaylistMessage.unsupportedCatalogQuery", {
+      requestId: options.requestId ?? null,
+      queryType: unsupportedCatalogQuery
+    });
+    return {
+      message: unsupportedCatalogQueryMessage(unsupportedCatalogQuery),
+      playlistUpdate: null,
+      playlistMeta: null,
+      updatedConstraints: playlist.constraints,
+      constraintReport: evaluatePlaylistConstraints(playlist.tracks, playlist.constraints),
+      rejectedCandidates: []
+    };
+  }
   const operatorPlan = await resolveOperatorPlan(playlist, userMessage, options);
   emitReviewRoutingTrace("backend.handlePlaylistMessage.operatorPlan", {
     requestId: options.requestId ?? null,

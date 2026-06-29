@@ -3,6 +3,7 @@ import { isModelShapeError } from "@/lib/ai/modelErrors";
 import { getLLMProvider } from "@/lib/ai/llmClient";
 import { instructionIntentPrompt } from "@/lib/ai/prompts";
 import { attemptLlmContract } from "@/lib/ai/services/llmService";
+import { parseRequestedTrackCount as parseRequestedTrackCountFromLexing } from "@/lib/playlist/requestLexing";
 import { mergeConstraintLayersWithRegistry } from "@/lib/playlist/constraints/registry";
 import { playlistConstraintFieldNames } from "@/lib/playlist/schemas";
 import type { CuratorRunOptions } from "@/lib/ai/curatorTypes";
@@ -77,24 +78,7 @@ export type InstructionIntentParseResult = {
 };
 
 export function parseRequestedTrackCount(userMessage: string): number | null {
-  const match = userMessage.match(/\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten)\s+(?:\w+\s+){0,3}(?:songs?|tracks?)\b/i);
-  if (!match) {
-    return null;
-  }
-  const words: Record<string, number> = {
-    one: 1,
-    two: 2,
-    three: 3,
-    four: 4,
-    five: 5,
-    six: 6,
-    seven: 7,
-    eight: 8,
-    nine: 9,
-    ten: 10
-  };
-  const value = words[match[1].toLowerCase()] ?? Number.parseInt(match[1], 10);
-  return Number.isFinite(value) ? Math.min(Math.max(value, 1), 20) : null;
+  return parseRequestedTrackCountFromLexing(userMessage);
 }
 
 export function reconcileDurationPolarity(

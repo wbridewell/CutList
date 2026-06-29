@@ -1,4 +1,5 @@
 import {
+  type NormalizedInstructionIntent,
   normalizeInstructionIntentLayers,
   withNormalizedInstructionScope
 } from "@/lib/ai/services/instructionIntent";
@@ -7,6 +8,7 @@ import {
   parseReplacementCount,
   parseTargetTotalTrackCount
 } from "@/lib/ai/services/deterministicRequestParser";
+import { containsAddIntent } from "@/lib/playlist/requestLexing";
 import type { DiscoveryRadius, InstructionIntent, PlaylistConstraints } from "@/types/playlist";
 
 type ScopedInstructionIntent = InstructionIntent | null;
@@ -46,7 +48,8 @@ export type CuratorHeuristicSignals = {
 };
 
 function isAdditiveVocalProfileRequest(userMessage: string): boolean {
-  return /\b(?:add|adding|find|give me|recommend|suggest|include|bring in)\b.{0,40}\b(?:female|women|woman|girl|male|men|man|boy|mixed|duet|instrumental)\s+(?:vocals?|vocalists?|singers?|voices?)\b/i.test(userMessage) &&
+  return (containsAddIntent(userMessage) || /\binclude\b/i.test(userMessage)) &&
+    /\b(?:female|women|woman|girl|male|men|man|boy|mixed|duet|instrumental)\s+(?:vocals?|vocalists?|singers?|voices?)\b/i.test(userMessage) &&
     !/\b(?:only|all|exclusively|must be|should be)\b/i.test(userMessage);
 }
 
@@ -103,6 +106,49 @@ export function scopeAdditiveVocalProfileIntent<TIntent extends ScopedInstructio
   }) as TIntent;
 }
 
+export function scopeAdditiveVocalProfileNormalizedIntent(
+  normalized: NormalizedInstructionIntent,
+  userMessage: string
+): NormalizedInstructionIntent {
+  if (!isAdditiveVocalProfileRequest(userMessage)) {
+    return normalized;
+  }
+
+  const vocalProfile = normalized.persistentGuidance.vocalProfile ?? normalized.requestScopedGuidance.vocalProfile;
+  if (!vocalProfile) {
+    return normalized;
+  }
+  if (!normalized.raw) {
+    return {
+      ...normalized,
+      persistentGuidance: persistentGuidanceWithoutVocalProfile(normalized.persistentGuidance),
+      requestScopedGuidance: {
+        ...normalized.requestScopedGuidance,
+        vocalProfile
+      }
+    };
+  }
+
+  const persistentGuidance = { ...normalized.persistentGuidance };
+  delete persistentGuidance.vocalProfile;
+  return {
+    ...normalized,
+    ...normalizeInstructionIntentLayers(withNormalizedInstructionScope(normalized.raw, {
+      persistentGuidance,
+      requestScopedGuidance: {
+        ...normalized.requestScopedGuidance,
+        vocalProfile
+      }
+    }))
+  };
+}
+
+function persistentGuidanceWithoutVocalProfile(guidance: NormalizedInstructionIntent["persistentGuidance"]) {
+  const next = { ...guidance };
+  delete next.vocalProfile;
+  return next;
+}
+
 export function isRemovalIntent(userMessage: string): boolean {
   return collectCuratorHeuristics(userMessage).operation.removal;
 }
@@ -116,10 +162,11 @@ export function isReplacementIntent(userMessage: string): boolean {
 }
 
 export function replacementCountForVersionCleanup(userMessage: string, removedCount: number): number | null {
-  if (!/\b(add|replace|replacement|replacements)\b/i.test(userMessage)) {
+  const heuristics = collectCuratorHeuristics(userMessage);
+  if (!heuristics.operation.addition && !heuristics.operation.replacement) {
     return null;
   }
-  const explicit = parseDeterministicRequest(userMessage).countSignals.requestedAddCount;
+  const explicit = heuristics.counts.requestedAddCount;
   if (explicit != null) {
     return explicit;
   }

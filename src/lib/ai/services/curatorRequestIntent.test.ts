@@ -51,6 +51,18 @@ describe("curator request intent helpers", () => {
         requestScopedGuidanceFields: ["vocalProfile"]
       }
     });
+    expect(scopeAdditiveVocalProfileIntent(intent, "queue female vocalists after firestarter")).toMatchObject({
+      scopeIntent: {
+        persistentGuidanceFields: [],
+        requestScopedGuidanceFields: ["vocalProfile"]
+      }
+    });
+    expect(scopeAdditiveVocalProfileIntent(intent, "drop in female vocalists before roads")).toMatchObject({
+      scopeIntent: {
+        persistentGuidanceFields: [],
+        requestScopedGuidanceFields: ["vocalProfile"]
+      }
+    });
   });
 
   it("keeps exclusive vocal profile requests persistent", () => {
@@ -87,6 +99,7 @@ describe("curator request intent helpers", () => {
     expect(parseTargetTotalTrackCount("round this out to 20 total tracks")).toBe(20);
     expect(parseTargetTotalTrackCount("bring it up to 200 tracks")).toBe(20);
     expect(replacementCountForVersionCleanup("remove duplicate versions and add a few replacements", 2)).toBe(3);
+    expect(replacementCountForVersionCleanup("remove duplicate versions and queue a few warmer replacements", 2)).toBe(3);
     expect(isReplacementIntent("replace the weakest 3 tracks")).toBe(true);
     expect(parseReplacementCount("replace the weakest 3 tracks")).toBe(3);
   });

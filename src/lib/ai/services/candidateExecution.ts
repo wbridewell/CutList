@@ -264,15 +264,17 @@ export async function executeCandidateGeneration(
     const rejectedCandidates: RejectedCandidate[] = [];
     let activeConstraints = plan.constraintState.activeConstraints;
     const targetTrack = plan.playlist.tracks.find((track) => track.id === plan.replacementTarget?.trackId) ?? null;
+    const requestedAlbum = plan.requestedReplacementAlbum;
     const outcome = await verifyTrack(
       {
         title: plan.replacementTarget.title,
-        artist: plan.replacementTarget.artist
+        artist: plan.replacementTarget.artist,
+        album: requestedAlbum
       },
       {
         title: plan.replacementTarget.title,
         artist: plan.replacementTarget.artist,
-        album: null,
+        album: requestedAlbum,
         reason: "Canonical version replacement.",
         vibeTags: [],
         expectedFitNotes: "",
@@ -329,9 +331,12 @@ export async function executeCandidateGeneration(
 
     for (const requestedTrack of explicitRequestedTracks) {
       throwIfAborted(options.signal);
+      const requestedLabel = requestedTrack.artist
+        ? `${requestedTrack.artist} - ${requestedTrack.title}`
+        : requestedTrack.title;
       options.onProgress?.({
         stage: "verifying",
-        message: `Verifying ${requestedTrack.artist} - ${requestedTrack.title}.`,
+        message: `Verifying ${requestedLabel}.`,
         acceptedCount: acceptedTracks.length,
         rejectedCount: rejectedCandidates.length
       });

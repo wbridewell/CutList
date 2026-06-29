@@ -63,7 +63,7 @@ export class ItunesProvider implements MusicMetadataProvider {
 
   async searchTrack(query: TrackSearchQuery): Promise<TrackSearchResult[]> {
     const params = new URLSearchParams({
-      term: `${query.artist} ${query.title}`,
+      term: [query.artist, query.title].filter(Boolean).join(" "),
       entity: "song",
       limit: "5",
       country: "US"

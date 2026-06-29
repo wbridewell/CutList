@@ -99,6 +99,7 @@ export type ResolvedCuratorRequestPlan = {
   instructionIntentStatus: InstructionIntentParseStatus | "not_attempted";
   effectiveDiscoveryRadius: DiscoveryRadius;
   replacementMode: ReplacementMode;
+  requestedReplacementAlbum: string | null;
   constraintState: ConstraintExecutionState;
   suppressionState: SuppressionExecutionState;
   preGenerationRemovalPlan: PreGenerationRemovalPlan;

@@ -5,10 +5,15 @@ import { getLLMProvider } from "@/lib/ai/llmClient";
 import type { CuratorRunOptions } from "@/lib/ai/curatorTypes";
 import type { CuratorHeuristicSignals } from "@/lib/ai/services/curatorRequestIntent";
 import type { NormalizedInstructionIntent } from "@/lib/ai/services/instructionIntent";
+import { resolveNamedTrack } from "@/lib/playlist/requestPlacement";
+import {
+  containsAddIntent,
+  inferLexedClauseOperations,
+  parsePlacementSubjectQuery,
+  splitOrderedClauses
+} from "@/lib/playlist/requestLexing";
 import type { CuratorPlannedStep, ParsedTrackRows, ResolvedOperation } from "@/lib/ai/services/workflowTypes";
 import type { PlaylistState } from "@/types/playlist";
-
-const clauseSplitPattern = /\b(?:and then|then|after that|afterward|afterwards|once that's done|once that is done|once done|finally)\b|[.;\n]+/i;
 
 type Clause = {
   text: string;
@@ -20,69 +25,14 @@ function trimClause(text: string): string {
 }
 
 function splitClauses(userMessage: string): Clause[] {
-  const clauses: Clause[] = [];
-  let start = 0;
-  let remaining = userMessage;
-  let baseOffset = 0;
-
-  while (remaining.length > 0) {
-    const match = remaining.match(clauseSplitPattern);
-    if (!match || match.index == null) {
-      const text = trimClause(remaining);
-      if (text) {
-        clauses.push({ text, start: baseOffset });
-      }
-      break;
-    }
-
-    const before = trimClause(remaining.slice(0, match.index));
-    if (before) {
-      clauses.push({ text: before, start: baseOffset });
-    }
-    const consumed = match.index + match[0].length;
-    baseOffset += consumed;
-    remaining = remaining.slice(consumed);
-    start += consumed;
-  }
-
-  return clauses.length > 0 ? clauses : [{ text: userMessage.trim(), start: 0 }];
+  return splitOrderedClauses(userMessage).map((clause) => ({
+    text: trimClause(clause.text),
+    start: clause.sourceOrder
+  }));
 }
 
 function containsImportText(parsedTracks: ParsedTrackRows): boolean {
   return parsedTracks.length > 0;
-}
-
-function containsAnalyzeIntent(text: string): boolean {
-  return /\b(review|analy[sz]e|critique|what(?:'s| is) working|what should happen next)\b/i.test(text);
-}
-
-function containsExplicitReorderIntent(text: string): boolean {
-  return /\b(re-?order|reorganize|resequence|sequence|sequencing|arrange|rearrange|spread out|separate|cluster|group|move .*?(?:earlier|later|around))\b/i.test(text);
-}
-
-function containsAddIntent(text: string): boolean {
-  if (/\b(?:too|bit|little)\s+hard\s+to\s+find\b/i.test(text) || /\beasier\s+to\s+find\b/i.test(text)) {
-    return false;
-  }
-  if (/\b(?:without\b(?:.{0,40})?\badd(?:ing)?|not\s+add(?:ing)?|don't\s+add|do not\s+add|never\s+add)\b/i.test(text)) {
-    return false;
-  }
-  return !/\badd(?:ing)?\s+(?:a\s+)?(?:constraint|rule)\b/i.test(text) &&
-    !/\bsuggest\s+(?:cuts?|removals?|deletions?|drops?|edits?)\b/i.test(text) && (
-    /\b(?:add|adding|find|give me|recommend|suggest|fill|round out|build|pump|extend|grow)\b/i.test(text) ||
-    /\bbring\b.{0,30}\b(?:to|up to)\s*\d+/i.test(text)
-  );
-}
-
-function containsReplaceIntent(text: string): boolean {
-  return /\b(replace|replacing|replacement|replacements|swap out|swap|trade out|substitute)\b/i.test(text);
-}
-
-function containsRemoveIntent(text: string): boolean {
-  if (/\b(?:without\b(?:.{0,40})?\bremov(?:e|ing)|not\s+remov(?:e|ing)|don't\s+remove|do not\s+remove|never\s+remove)\b/i.test(text)) {
-    return false;
-  }
-  return /\b(remove|removing|delete|drop|cut|cuts|prune|clear|trim)\b/i.test(text) || /\bget rid of\b/i.test(text);
 }
 
 function summarizeIntent(intent: NormalizedInstructionIntent, heuristics: CuratorHeuristicSignals): string {
@@ -99,48 +49,7 @@ function summarizeIntent(intent: NormalizedInstructionIntent, heuristics: Curato
 }
 
 function inferClauseOperations(clause: string): Array<Exclude<CuratorPlannedStep["kind"], "update_rules" | "metadata" | "import">> {
-  const matches: Array<{ index: number; kind: Exclude<CuratorPlannedStep["kind"], "update_rules" | "metadata" | "import"> }> = [];
-
-  const patterns: Array<[Exclude<CuratorPlannedStep["kind"], "update_rules" | "metadata" | "import">, RegExp]> = [
-    ["analyze", /\b(review|analy[sz]e|critique|what(?:'s| is) working|what should happen next)\b/i],
-    ["replace", /\b(replace|replacing|replacement|replacements|swap out|swap|trade out|substitute)\b/i],
-    ["remove", /\b(remove|removing|delete|drop|cut|cuts|prune|clear|trim|get rid of)\b/i],
-    ["add", /\b(?:add|adding|find|give me|recommend|suggest|fill|round out|build|pump|extend|grow)\b/i],
-    ["reorder", /\b(re-?order|reorganize|resequence|sequence|sequencing|arrange|rearrange|spread out|separate|cluster|group|move .*?(?:earlier|later|around))\b/i]
-  ];
-
-  for (const [kind, pattern] of patterns) {
-    if (kind === "add" && !containsAddIntent(clause)) {
-      continue;
-    }
-    if (kind === "remove" && !containsRemoveIntent(clause)) {
-      continue;
-    }
-    if (kind === "replace" && !containsReplaceIntent(clause)) {
-      continue;
-    }
-    if (kind === "reorder" && !containsExplicitReorderIntent(clause)) {
-      continue;
-    }
-    if (kind === "analyze" && !containsAnalyzeIntent(clause)) {
-      continue;
-    }
-    const match = clause.match(pattern);
-    if (match?.index != null) {
-      matches.push({ index: match.index, kind });
-    }
-  }
-
-  const ordered = matches
-    .sort((first, second) => first.index - second.index)
-    .filter((item, index, items) => items.findIndex((other) => other.kind === item.kind) === index)
-    .map((item) => item.kind);
-
-  if (ordered.includes("replace")) {
-    return ordered.filter((kind) => kind !== "remove" && kind !== "add");
-  }
-
-  return ordered;
+  return inferLexedClauseOperations(clause) as Array<Exclude<CuratorPlannedStep["kind"], "update_rules" | "metadata" | "import">>;
 }
 
 function sortAndNormalizeSteps(steps: CuratorPlannedStep[]): CuratorPlannedStep[] {
@@ -196,6 +105,8 @@ function heuristicStepPlan(input: {
   for (const clause of clauses) {
     const hintedKinds = input.deterministicClauseHints?.find((hint) => hint.text === clause.text)?.operations;
     const kinds = (hintedKinds?.length ? hintedKinds : inferClauseOperations(clause.text)) as Array<Exclude<CuratorPlannedStep["kind"], "update_rules" | "metadata" | "import">>;
+    const placementSubject = parsePlacementSubjectQuery(clause.text);
+    const placementSubjectMatch = placementSubject ? resolveNamedTrack(input.playlist, placementSubject) : null;
     if (kinds.length === 0) {
       continue;
     }
@@ -203,16 +114,23 @@ function heuristicStepPlan(input: {
       if (kind === "reorder" && containsAddIntent(clause.text) && !/\bthen\b/i.test(input.userMessage) && clauses.length === 1) {
         continue;
       }
+      const effectiveKind = kind === "add" &&
+        placementSubjectMatch?.trackId &&
+        (placementSubjectMatch.resolution === "exact" || placementSubjectMatch.resolution === "fuzzy")
+        ? "reorder"
+        : kind;
       steps.push({
-        id: `step-${order + 1}-${kind}`,
-        kind,
+        id: `step-${order + 1}-${effectiveKind}`,
+        kind: effectiveKind,
         sourceOrder: order++,
         originText: clause.text,
         dependsOnStepIds: [],
-        planningNotes: [],
-        requestedAddCount: kind === "add" ? input.requestedAddCount : null,
-        targetTotalTrackCount: kind === "add" ? input.targetTotalTrackCount : null,
-        replacementCount: kind === "replace" ? input.replacementCount : null
+        planningNotes: effectiveKind === "reorder" && kind === "add"
+          ? [`Directed placement matched existing track "${placementSubjectMatch?.artist} - ${placementSubjectMatch?.title}", so the step was treated as a reorder.`]
+          : [],
+        requestedAddCount: effectiveKind === "add" ? input.requestedAddCount : null,
+        targetTotalTrackCount: effectiveKind === "add" ? input.targetTotalTrackCount : null,
+        replacementCount: effectiveKind === "replace" ? input.replacementCount : null
       });
     }
   }

@@ -150,6 +150,60 @@ export function reorderTrackInPlaylist(
   return { ...playlist, tracks, updatedAt };
 }
 
+export function moveTrackAfterTrack(
+  playlist: PlaylistState,
+  trackId: string,
+  anchorTrackId: string,
+  updatedAt = nowIso()
+): PlaylistState {
+  if (trackId === anchorTrackId) {
+    return playlist;
+  }
+
+  const tracks = [...playlist.tracks];
+  const fromIndex = tracks.findIndex((track) => track.id === trackId);
+  const anchorIndex = tracks.findIndex((track) => track.id === anchorTrackId);
+  if (fromIndex < 0 || anchorIndex < 0) {
+    return playlist;
+  }
+
+  const [track] = tracks.splice(fromIndex, 1);
+  const nextAnchorIndex = tracks.findIndex((candidate) => candidate.id === anchorTrackId);
+  if (nextAnchorIndex < 0) {
+    return playlist;
+  }
+
+  tracks.splice(nextAnchorIndex + 1, 0, track);
+  return { ...playlist, tracks, updatedAt };
+}
+
+export function moveTrackBeforeTrack(
+  playlist: PlaylistState,
+  trackId: string,
+  anchorTrackId: string,
+  updatedAt = nowIso()
+): PlaylistState {
+  if (trackId === anchorTrackId) {
+    return playlist;
+  }
+
+  const tracks = [...playlist.tracks];
+  const fromIndex = tracks.findIndex((track) => track.id === trackId);
+  const anchorIndex = tracks.findIndex((track) => track.id === anchorTrackId);
+  if (fromIndex < 0 || anchorIndex < 0) {
+    return playlist;
+  }
+
+  const [track] = tracks.splice(fromIndex, 1);
+  const nextAnchorIndex = tracks.findIndex((candidate) => candidate.id === anchorTrackId);
+  if (nextAnchorIndex < 0) {
+    return playlist;
+  }
+
+  tracks.splice(nextAnchorIndex, 0, track);
+  return { ...playlist, tracks, updatedAt };
+}
+
 export function updatePlaylistTextField(
   playlist: PlaylistState,
   field: PlaylistTextField,

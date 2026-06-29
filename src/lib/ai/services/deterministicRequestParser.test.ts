@@ -3,6 +3,7 @@ import {
   parseDeterministicRequest,
   parseExplicitRequestedTracks
 } from "@/lib/ai/services/deterministicRequestParser";
+import { parseReplacementIntent } from "@/lib/playlist/requestLexing";
 
 describe("deterministicRequestParser", () => {
   it("parses covers-only constraints as deterministic guidance", () => {
@@ -16,6 +17,9 @@ describe("deterministicRequestParser", () => {
     expect(parseExplicitRequestedTracks("add heaven have mercy by diamanda galas")).toEqual([
       { title: "heaven have mercy", artist: "diamanda galas", album: null }
     ]);
+    expect(parseExplicitRequestedTracks("queue army of me after firestarter")).toEqual([
+      { title: "army of me", artist: "", album: null }
+    ]);
     expect(parseExplicitRequestedTracks("add smells like teen spirit covered by patti smith and covered by tori amos")).toEqual([
       { title: "smells like teen spirit", artist: "patti smith", album: null },
       { title: "smells like teen spirit", artist: "tori amos", album: null }
@@ -26,6 +30,13 @@ describe("deterministicRequestParser", () => {
     )).toEqual([]);
   });
 
+  it("parses replacement targets and albums with apostrophes", () => {
+    expect(parseReplacementIntent("replace the version of \"bela lugosi's dead\" with the album cut from \"no one's first, and you're next\"")).toMatchObject({
+      targetQuery: "bela lugosi's dead",
+      requestedAlbum: "no one's first, and you're next"
+    });
+  });
+
   it("preserves ordered reorder-plus-cut requests and extracts artist limits", () => {
     const result = parseDeterministicRequest(
       "this is a list of covered songs. i want you to reorder it so that tracks by the same artist are separated. we have too many diamanda galas and patti smith tracks. probably i should limit this to 2 from each artist, so suggest cuts."
@@ -33,6 +44,23 @@ describe("deterministicRequestParser", () => {
 
     expect(result.sequencingSignals.clauses.flatMap((clause) => clause.operations)).toEqual(["reorder", "remove"]);
     expect(result.deterministicPersistentConstraints.maxTracksPerArtist).toBe(2);
+  });
+
+  it("treats tighten and compress language as removal-style mutating planning", () => {
+    const tighten = parseDeterministicRequest("Tighten the playlist while preserving continuity, mutation, and physical atmosphere.");
+    const compress = parseDeterministicRequest("review this, then compress it to 8 tracks");
+
+    expect(tighten.operationSignals.removal).toBe(true);
+    expect(tighten.sequencingSignals.clauses.flatMap((clause) => clause.operations)).toEqual(["remove"]);
+    expect(compress.sequencingSignals.clauses.flatMap((clause) => clause.operations)).toEqual(["analyze", "remove"]);
+  });
+
+  it("does not treat drop in placement language as removal", () => {
+    const result = parseDeterministicRequest("drop in bela lugosi's dead before roads");
+
+    expect(result.operationSignals.removal).toBe(false);
+    expect(result.operationSignals.addition).toBe(true);
+    expect(result.sequencingSignals.clauses.flatMap((clause) => clause.operations)).toEqual(["add"]);
   });
 
   it("treats without-adding-or-removing reorder language as reorder only", () => {

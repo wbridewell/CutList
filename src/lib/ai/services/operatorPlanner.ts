@@ -1,10 +1,20 @@
 import { attemptLlmContract } from "@/lib/ai/services/llmService";
 import { operatorPlanPrompt } from "@/lib/ai/prompts";
-import { normalizeInstructionIntentLayers, parseInstructionIntentDetailed, parseRequestedTrackCount } from "@/lib/ai/services/instructionIntent";
+import { normalizeInstructionIntentLayers, parseInstructionIntentDetailed } from "@/lib/ai/services/instructionIntent";
 import { parseDeterministicRequest } from "@/lib/ai/services/deterministicRequestParser";
 import { parseTrackRowsFromText } from "@/lib/playlist/io/textImport";
 import { bindDeclaredTrackPlacement, detectCanonicalReplacementTargetQuery, detectDeclaredTrackPlacement, resolveNamedTrack } from "@/lib/playlist/requestPlacement";
-import { hasCuratorSignals, hasNonModificationDirective, hasReviewSignals } from "@/lib/playlist/requestRouting";
+import {
+  extractNamedTransitionPair,
+  hasCuratorSignals,
+  hasNonModificationDirective,
+  hasSequencingReviewCue,
+  hasReviewSignals,
+  isPlainConversationalMessage,
+  parseReplacementIntent,
+  parseRequestedTrackCount,
+  parseTrackLevelDurationLimitMs
+} from "@/lib/playlist/requestLexing";
 import { determineReviewModeDeterministically } from "@/lib/ai/services/reviewMode";
 import type { CuratorRunOptions } from "@/lib/ai/curatorTypes";
 import type {
@@ -19,16 +29,6 @@ import type {
   UserRequestDeterministicSignals
 } from "@/types/playlist";
 
-function parseTrackLevelDurationLimitMs(userMessage: string): number | null {
-  const match = userMessage.match(/\b(?:tracks?|songs?)\b.{0,20}\b(?:under|below|at most|no longer than)\b.{0,10}(\d+)\s*(?:min|minutes?)\b/i)
-    ?? userMessage.match(/\b(?:under|below|at most|no longer than)\b.{0,10}(\d+)\s*(?:min|minutes?)\b.{0,20}\b(?:tracks?|songs?)\b/i);
-  if (!match) {
-    return null;
-  }
-  const minutes = Number.parseInt(match[1], 10);
-  return Number.isFinite(minutes) ? Math.max(minutes, 1) * 60_000 : null;
-}
-
 function parseListAfterLabel(userMessage: string, label: "Preserve" | "Avoid"): string[] {
   const match = userMessage.match(new RegExp(`${label}:([\\s\\S]+?)(?:\\n\\s*\\w+:|$)`, "i"));
   if (!match?.[1]) {
@@ -41,24 +41,7 @@ function parseListAfterLabel(userMessage: string, label: "Preserve" | "Avoid"): 
 }
 
 function extractNamedTransition(userMessage: string): { fromText: string; toText: string } | null {
-  const quotedMatch = userMessage.match(/\b(?:repair|fix)?\b[\s\S]{0,120}\btransition\b[\s\S]{0,120}\bfrom\b\s+["']([^"'\n]+)["']\s+\binto\b\s+["']([^"'\n]+)["']/i)
-    ?? userMessage.match(/\b(?:repair|fix)\b[\s\S]{0,120}\bfrom\b\s+["']([^"'\n]+)["']\s+\binto\b\s+["']([^"'\n]+)["']/i);
-  if (quotedMatch) {
-    return {
-      fromText: quotedMatch[1].trim(),
-      toText: quotedMatch[2].trim()
-    };
-  }
-
-  const bareMatch = userMessage.match(/\b(?:repair|fix)?\b[\s\S]{0,120}\btransition\b[\s\S]{0,120}\bfrom\b\s+([^.\n]+?)\s+\binto\b\s+([^.\n]+?)(?=[.!?\n]|$)/i)
-    ?? userMessage.match(/\b(?:repair|fix)\b[\s\S]{0,120}\bfrom\b\s+([^.\n]+?)\s+\binto\b\s+([^.\n]+?)(?=[.!?\n]|$)/i);
-  if (!bareMatch) {
-    return null;
-  }
-  return {
-    fromText: bareMatch[1].trim().replace(/^["']|["']$/g, ""),
-    toText: bareMatch[2].trim().replace(/^["']|["']$/g, "")
-  };
+  return extractNamedTransitionPair(userMessage);
 }
 
 function inferReviewModeFromTemplate(planTemplate: ResolvedOperatorPlan["planTemplate"]): ReviewMode | null {
@@ -84,9 +67,7 @@ function detectReplacementMode(userMessage: string, deterministicSignals: UserRe
   if (!deterministicSignals.replacement) {
     return "generic";
   }
-  return /\b(?:canonical|proper|real|original|studio)\b/i.test(userMessage) || /\bitunes originals?\b/i.test(userMessage)
-    ? "canonical_version"
-    : "generic";
+  return parseReplacementIntent(userMessage)?.mode ?? "generic";
 }
 
 function defaultOperatorsForTemplate(
@@ -196,7 +177,6 @@ function fallbackReadOnlyReviewPlan(userMessage: string, parameterHints: Operato
     };
   }
 
-  const sequencingCue = /\b(?:reorder|resequence|sequence|sequencing|order|flow|arc)\b/i.test(userMessage);
   const reviewTemplate = reviewMode === "weak_links_only"
     ? "weak_links_review"
     : reviewMode === "compression_review"
@@ -205,7 +185,7 @@ function fallbackReadOnlyReviewPlan(userMessage: string, parameterHints: Operato
         ? "sequencing_review"
       : reviewMode === "bridge_options_only"
           ? "bridge_options_review"
-          : sequencingCue
+          : hasSequencingReviewCue(userMessage)
             ? "sequencing_review"
             : "diagnosis_review";
 
@@ -548,7 +528,9 @@ export async function resolveOperatorPlan(
       ?? deterministicFallbackPlan(playlist, userMessage, deterministicSignals, parameterHints, explicitReadOnly, detectedPlacement)
     : {
       ...attempt.parsed,
-      replacementMode: attempt.parsed.replacementMode ?? replacementMode,
+      replacementMode: replacementMode === "canonical_version"
+        ? "canonical_version"
+        : attempt.parsed.replacementMode ?? replacementMode,
       declaredEntities: {
         ...attempt.parsed.declaredEntities,
         placement: replacementMode === "generic" && !deterministicSignals.replacement
@@ -581,7 +563,26 @@ export async function resolveOperatorPlan(
     }
     : candidatePlan;
 
-  const validatedPlan = validateOperators(userMessage, explicitReadOnly, routeCorrectedPlan);
+  const nonGreetingConversationalOverride = routeCorrectedPlan.routeFamily === "conversational" &&
+    !isPlainConversationalMessage(userMessage);
+  const safeguardedPlan = nonGreetingConversationalOverride
+    ? {
+      ...deterministicFallbackPlan(
+        playlist,
+        userMessage,
+        deterministicSignals,
+        routeCorrectedPlan.parameterHints,
+        explicitReadOnly,
+        detectedPlacement
+      ),
+      planningNotes: [
+        ...routeCorrectedPlan.planningNotes,
+        "Deterministic override rejected conversational fallback for a non-greeting request."
+      ]
+    }
+    : routeCorrectedPlan;
+
+  const validatedPlan = validateOperators(userMessage, explicitReadOnly, safeguardedPlan);
   const boundEntities = bindEntities(playlist, validatedPlan.declaredEntities, validatedPlan.parameterHints);
 
   return {

@@ -1,4 +1,6 @@
+import { titlesEquivalent } from "@/lib/music/matchSemantics";
 import { normalizeText } from "@/lib/music/normalize";
+import { parseDeclaredTrackPlacement, parseReplacementIntent } from "@/lib/playlist/requestLexing";
 import type { BoundNamedTrack, BoundTrackPlacement, DeclaredTrackPlacement, PlaylistState } from "@/types/playlist";
 
 export function resolveNamedTrack(playlist: PlaylistState, query: string): BoundNamedTrack {
@@ -15,11 +17,11 @@ export function resolveNamedTrack(playlist: PlaylistState, query: string): Bound
 
   const normalizedQuery = normalizeText(query);
   const exactMatches = playlist.tracks.filter((track) => {
-    const title = normalizeText(track.title);
+    const titleMatch = titlesEquivalent(query, track.title);
     const artist = normalizeText(track.artist);
     const combo = normalizeText(`${track.artist} ${track.title}`);
     const dashed = normalizeText(`${track.artist} - ${track.title}`);
-    return normalizedQuery === title || normalizedQuery === combo || normalizedQuery === dashed || normalizedQuery === artist;
+    return titleMatch || normalizedQuery === combo || normalizedQuery === dashed || normalizedQuery === artist;
   });
   if (exactMatches.length === 1) {
     const track = exactMatches[0];
@@ -65,68 +67,21 @@ export function resolveNamedTrack(playlist: PlaylistState, query: string): Bound
   };
 }
 
-function hasCanonicalReplacementCue(userMessage: string): boolean {
-  return /\b(?:canonical|proper|real|original|studio)\b/i.test(userMessage) ||
-    /\bitunes originals?\b/i.test(userMessage) ||
-    /\bversion\b/i.test(userMessage);
-}
-
-function hasAddIntent(userMessage: string): boolean {
-  if (/\b(?:do not|don't|never)\s+add\b/i.test(userMessage)) {
-    return false;
-  }
-  return /\b(?:add|adding|insert|place|put|slot|drop in|bring in|queue)\b/i.test(userMessage);
-}
-
 export function detectDeclaredTrackPlacement(userMessage: string): DeclaredTrackPlacement | null {
-  if (!hasAddIntent(userMessage)) {
-    return null;
-  }
-
-  const afterMatch = userMessage.match(/\bafter\s+["']?([^"'.!\n]+?)["']?(?=$|[.!?\n]|,\s*(?:and|then)\b)/i);
-  if (afterMatch?.[1]) {
-    return {
-      mode: "after_track",
-      anchorQuery: afterMatch[1].trim()
-    };
-  }
-
-  const beforeMatch = userMessage.match(/\bbefore\s+["']?([^"'.!\n]+?)["']?(?=$|[.!?\n]|,\s*(?:and|then)\b)/i);
-  if (beforeMatch?.[1]) {
-    return {
-      mode: "before_track",
-      anchorQuery: beforeMatch[1].trim()
-    };
-  }
-
-  if (/\bat\s+the\s+(?:beginning|start)\b|\bto\s+the\s+(?:beginning|start)\b/i.test(userMessage)) {
-    return {
-      mode: "prepend",
-      anchorQuery: null
-    };
-  }
-
-  if (/\bat\s+the\s+end\b|\bto\s+the\s+end\b/i.test(userMessage)) {
-    return {
-      mode: "append",
-      anchorQuery: null
-    };
-  }
-
-  return null;
+  return parseDeclaredTrackPlacement(userMessage);
 }
 
 export function detectCanonicalReplacementTargetQuery(
   playlist: PlaylistState,
   userMessage: string
 ): string | null {
-  if (!/\breplace\b/i.test(userMessage) || !hasCanonicalReplacementCue(userMessage)) {
+  const replacementIntent = parseReplacementIntent(userMessage);
+  if (replacementIntent?.mode !== "canonical_version") {
     return null;
   }
 
-  const versionOfMatch = userMessage.match(/\bversion\s+of\s+["']?([^"'.!\n]+?)["']?(?=$|[.!?\n]|\s+\b(?:with|for|and|then)\b|,\s*(?:with|for|and|then)\b)/i);
-  if (versionOfMatch?.[1]) {
-    return versionOfMatch[1].trim();
+  if (replacementIntent.targetQuery) {
+    return replacementIntent.targetQuery;
   }
 
   const candidates = playlist.tracks.filter((track) => {

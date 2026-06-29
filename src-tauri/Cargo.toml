@@ -1,6 +1,6 @@
 [package]
 name = "cutlist"
-version = "0.1.0"
+version = "0.1.5"
 description = "The CutList desktop alpha"
 authors = ["Will Bridewell"]
 edition = "2021"

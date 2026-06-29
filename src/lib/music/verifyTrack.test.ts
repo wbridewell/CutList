@@ -102,6 +102,48 @@ describe("track verification", () => {
     expect(score).toBeGreaterThanOrEqual(verificationPolicy.autoAcceptScore);
   });
 
+  it("scores leading-article title variants as high confidence", () => {
+    const score = scoreTrackMatch(
+      { artist: "My Life with the Thrill Kill Kult", title: "Days of Swine and Roses" },
+      {
+        source: "itunes",
+        sourceId: "tkk-1",
+        title: "The Days of Swine & Roses",
+        artist: "My Life with the Thrill Kill Kult",
+        album: "Confessions of a Knife",
+        durationMs: 247000,
+        sourceUrl: null,
+        artworkUrl: null,
+        explicit: false,
+        releaseDate: null,
+        primaryGenreName: "Industrial"
+      }
+    );
+
+    expect(score).toBeGreaterThanOrEqual(verificationPolicy.autoAcceptScore);
+  });
+
+  it("scores leading-article album variants as high confidence", () => {
+    const score = scoreTrackMatch(
+      { artist: "Nick Drake", title: "Pink Moon", album: "Pink Moon" },
+      {
+        source: "itunes",
+        sourceId: "nick-2",
+        title: "Pink Moon",
+        artist: "Nick Drake",
+        album: "The Pink Moon",
+        durationMs: 121000,
+        sourceUrl: null,
+        artworkUrl: null,
+        explicit: false,
+        releaseDate: null,
+        primaryGenreName: "Singer/Songwriter"
+      }
+    );
+
+    expect(score).toBeGreaterThanOrEqual(verificationPolicy.autoAcceptScore);
+  });
+
   it("scores backing-band artist variants as plausible but not high without stronger album evidence", () => {
     const score = scoreTrackMatch(
       { artist: "Ralph Stanley", title: "Man of Constant Sorrow" },
@@ -562,7 +604,54 @@ describe("track verification", () => {
     }
   });
 
-  it("applies LLM-assisted pruning and recommendation when review data is returned", async () => {
+  it("can verify a title-only request when one provider match is clearly best", async () => {
+    const titleOnlyProvider: MusicMetadataProvider = {
+      name: "itunes",
+      async searchTrack() {
+        return [
+          {
+            source: "itunes",
+            sourceId: "bjork-1",
+            title: "Army of Me",
+            artist: "Bjork",
+            album: "Post",
+            durationMs: 220000,
+            sourceUrl: "https://example.com/bjork",
+            artworkUrl: null,
+            explicit: false,
+            releaseDate: null,
+            primaryGenreName: "Alternative"
+          },
+          {
+            source: "itunes",
+            sourceId: "bjork-live-1",
+            title: "Army of Me (Live)",
+            artist: "Bjork",
+            album: "Telegram",
+            durationMs: 240000,
+            sourceUrl: "https://example.com/bjork-live",
+            artworkUrl: null,
+            explicit: false,
+            releaseDate: null,
+            primaryGenreName: "Alternative"
+          }
+        ];
+      },
+      async lookupTrack() {
+        return null;
+      }
+    };
+
+    const outcome = await verifyTrack({ artist: "", title: "Army of Me" }, undefined, titleOnlyProvider);
+
+    expect(outcome.status).toBe("verified");
+    if (outcome.status === "verified") {
+      expect(outcome.track.artist).toBe("Bjork");
+      expect(outcome.track.title).toBe("Army of Me");
+    }
+  });
+
+  it("accepts a single reviewed provider match after pruning obvious non-matches", async () => {
     vi.mocked(reviewAttemptedMatchesWithLLM).mockResolvedValueOnce({
       attemptedMatches: [{
         sourceId: "nick-1",
@@ -626,13 +715,10 @@ describe("track verification", () => {
       closeAlternativeProvider
     );
 
-    expect(outcome.status).toBe("rejected");
-    if (outcome.status === "rejected") {
-      expect(outcome.rejected.llmReviewed).toBe(true);
-      expect(outcome.rejected.prunedMatchCount).toBe(1);
-      expect(outcome.rejected.reviewSummary).toContain("false positive");
-      expect(outcome.rejected.attemptedMatches).toHaveLength(1);
-      expect(outcome.rejected.attemptedMatches?.[0].isRecommended).toBe(true);
+    expect(outcome.status).toBe("verified");
+    if (outcome.status === "verified") {
+      expect(outcome.track.sourceId).toBe("nick-1");
+      expect(outcome.track.verificationNote).toContain("pruning obvious non-matches");
     }
   });
 

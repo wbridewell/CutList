@@ -193,6 +193,22 @@ describe("UI redesign behavior", () => {
     expect(html).toContain("Reuse prompt");
   });
 
+  it("keeps the submitted prompt visible while the console is busy", () => {
+    const html = renderToStaticMarkup(React.createElement(NaturalRequestForm, {
+      busy: true,
+      playlistHasTracks: true,
+      progressStatus: "Starting request.",
+      userMessage: "Queue Army of Me after Firestarter.",
+      onAnalyze: () => undefined,
+      onInterrupt: () => undefined,
+      onSend: () => undefined,
+      onUserMessageChange: () => undefined
+    }));
+
+    expect(html).toContain("Queue Army of Me after Firestarter.");
+    expect(html).toContain("disabled");
+  });
+
   it("does not render curator-turn undo when no undoable curator state exists", () => {
     const html = renderToStaticMarkup(React.createElement(ActiveExchange, {
       busy: false,

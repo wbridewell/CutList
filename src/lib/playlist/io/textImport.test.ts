@@ -94,6 +94,12 @@ describe("text playlist import", () => {
     expect(tracks).toEqual([{ title: "Pink Moon", artist: "Nick Drake", album: "Pink Moon" }]);
   });
 
+  it("parses quoted comma-separated rows with embedded commas", () => {
+    const tracks = parseTrackRowsFromText("\"Mack the Knife, Live\",Ella Fitzgerald,\"Mack the Knife\"");
+
+    expect(tracks).toEqual([{ title: "Mack the Knife, Live", artist: "Ella Fitzgerald", album: "Mack the Knife" }]);
+  });
+
   it("parses exact requested add-track prompts", () => {
     expect(parseExplicitRequestedTracks("add heaven have mercy by diamanda galas")).toEqual([
       { title: "heaven have mercy", artist: "diamanda galas", album: null }

@@ -33,6 +33,13 @@ export function normalizeVersionlessText(value: string): string {
     .trim();
 }
 
+export function normalizeLooseTitle(value: string): string {
+  return normalizeVersionlessText(value)
+    .replace(LEADING_ARTICLE, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function normalizedTrackKey(artist: string, title: string): string {
   return `${normalizeText(artist)}::${normalizeText(title)}`;
 }

@@ -10,6 +10,7 @@ import { critiquePrompt, transitionRepairPrompt } from "@/lib/ai/prompts";
 import { attemptLlmContract } from "@/lib/ai/services/llmService";
 import { parseRequestedTrackCount } from "@/lib/ai/services/instructionIntent";
 import { determineReviewModeDeterministically } from "@/lib/ai/services/reviewMode";
+import { extractNamedTransitionPair } from "@/lib/playlist/requestLexing";
 import type { CompressionRequest } from "@/lib/playlist/analysis/compression";
 import { filterCompressionSuggestions, parseCompressionRequest } from "@/lib/playlist/analysis/compression";
 import { evaluatePlaylistConstraints } from "@/lib/playlist/constraints";
@@ -328,22 +329,7 @@ function inferDeclaredTransitionFromQuestion(userQuestion?: string): { fromText:
   if (!userQuestion?.trim()) {
     return null;
   }
-  const quotedMatch = userQuestion.match(/\b(?:repair|fix)?\b[\s\S]{0,120}\btransition\b[\s\S]{0,120}\bfrom\b\s+["']([^"'\n]+)["']\s+\binto\b\s+["']([^"'\n]+)["']/i)
-    ?? userQuestion.match(/\b(?:repair|fix)\b[\s\S]{0,120}\bfrom\b\s+["']([^"'\n]+)["']\s+\binto\b\s+["']([^"'\n]+)["']/i);
-  if (quotedMatch) {
-    return {
-      fromText: quotedMatch[1].trim(),
-      toText: quotedMatch[2].trim()
-    };
-  }
-  const bareMatch = userQuestion.match(/\b(?:repair|fix)?\b[\s\S]{0,120}\btransition\b[\s\S]{0,120}\bfrom\b\s+([^.\n]+?)\s+\binto\b\s+([^.\n]+?)(?=[.!?\n]|$)/i)
-    ?? userQuestion.match(/\b(?:repair|fix)\b[\s\S]{0,120}\bfrom\b\s+([^.\n]+?)\s+\binto\b\s+([^.\n]+?)(?=[.!?\n]|$)/i);
-  return bareMatch
-    ? {
-      fromText: bareMatch[1].trim().replace(/^["']|["']$/g, ""),
-      toText: bareMatch[2].trim().replace(/^["']|["']$/g, "")
-    }
-    : null;
+  return extractNamedTransitionPair(userQuestion);
 }
 
 function normalizeTrackQuery(value: string): string {

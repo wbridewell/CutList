@@ -164,6 +164,14 @@ describe("client workflows", () => {
       reviewPrompt: "review the playlist",
       curatorPrompt: "suggest two tracks by tori amos"
     });
+    expect(splitMixedComposerRequest("review this, then tighten the playlist")).toEqual({
+      reviewPrompt: "review this",
+      curatorPrompt: "tighten the playlist"
+    });
+    expect(splitMixedComposerRequest("review this, then compress it to 8 tracks")).toEqual({
+      reviewPrompt: "review this",
+      curatorPrompt: "compress it to 8 tracks"
+    });
   });
 
   it("derives a critique-only prompt for review button flows", () => {

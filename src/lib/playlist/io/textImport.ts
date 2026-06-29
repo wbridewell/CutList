@@ -25,7 +25,31 @@ function splitDelimitedLine(line: string): string[] {
   }
 
   if (line.includes(",")) {
-    return line.split(",").map(cleanCell);
+    const columns: string[] = [];
+    let current = "";
+    let inQuotes = false;
+
+    for (let index = 0; index < line.length; index += 1) {
+      const char = line[index];
+      const next = line[index + 1];
+      if (char === "\"") {
+        if (inQuotes && next === "\"") {
+          current += "\"";
+          index += 1;
+          continue;
+        }
+        inQuotes = !inQuotes;
+        continue;
+      }
+      if (char === "," && !inQuotes) {
+        columns.push(cleanCell(current));
+        current = "";
+        continue;
+      }
+      current += char;
+    }
+    columns.push(cleanCell(current));
+    return columns;
   }
 
   return [];

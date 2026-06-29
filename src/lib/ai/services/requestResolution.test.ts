@@ -94,6 +94,16 @@ describe("request resolution step planning", () => {
     expect(plan.constraintState.activeConstraints.notes).toBeUndefined();
   });
 
+  it("treats tighten-the-playlist language as a mutating cut request instead of a reorder fallback", async () => {
+    const plan = await resolveCuratorRequestPlan(
+      playlist,
+      "Tighten the playlist while preserving continuity, mutation, and physical atmosphere."
+    );
+
+    expect(plan.operation).toBe("remove");
+    expect(plan.steps.filter((step) => step.kind !== "update_rules").map((step) => step.kind)).toEqual(["remove"]);
+  });
+
   it("strips a previously stuck reorder note on the direct reorder path", async () => {
     const plan = await resolveCuratorRequestPlan(
       {
@@ -159,6 +169,43 @@ describe("request resolution step planning", () => {
     );
 
     expect(plan.operation).toBe("reorder");
-    expect(plan.steps.map((step) => step.kind)).toEqual(["reorder"]);
+    expect(plan.steps.filter((step) => step.kind !== "update_rules").map((step) => step.kind)).toEqual(["reorder"]);
+  });
+
+  it("treats queue-after requests as a reorder when the requested track is already present", async () => {
+    const queuedPlaylist: PlaylistState = {
+      ...playlist,
+      tracks: [
+        track("track-1", "Army of Me", "Bjork"),
+        track("track-2", "Firestarter", "The Prodigy"),
+        track("track-3", "Roads", "Portishead")
+      ]
+    };
+
+    const plan = await resolveCuratorRequestPlan(
+      queuedPlaylist,
+      "queue army of me after firestarter"
+    );
+
+    expect(plan.operation).toBe("reorder");
+    expect(plan.steps.filter((step) => step.kind !== "update_rules").map((step) => step.kind)).toEqual(["reorder"]);
+  });
+
+  it("keeps queue-after requests as additions when the requested track is missing", async () => {
+    const queuedPlaylist: PlaylistState = {
+      ...playlist,
+      tracks: [
+        track("track-1", "Firestarter", "The Prodigy"),
+        track("track-2", "Roads", "Portishead")
+      ]
+    };
+
+    const plan = await resolveCuratorRequestPlan(
+      queuedPlaylist,
+      "queue army of me after firestarter"
+    );
+
+    expect(plan.operation).toBe("generate");
+    expect(plan.steps.filter((step) => step.kind !== "update_rules").map((step) => step.kind)).toEqual(["add"]);
   });
 });
