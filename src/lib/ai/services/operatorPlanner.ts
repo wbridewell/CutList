@@ -181,9 +181,11 @@ function fallbackReadOnlyReviewPlan(userMessage: string, parameterHints: Operato
     ? "weak_links_review"
     : reviewMode === "compression_review"
       ? "compression_review"
+      : reviewMode === "diagnose_only"
+        ? "diagnosis_review"
       : reviewMode === "sequencing_only"
         ? "sequencing_review"
-      : reviewMode === "bridge_options_only"
+        : reviewMode === "bridge_options_only"
           ? "bridge_options_review"
           : hasSequencingReviewCue(userMessage)
             ? "sequencing_review"

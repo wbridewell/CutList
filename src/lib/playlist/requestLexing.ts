@@ -235,6 +235,10 @@ export function containsReplaceIntent(text: string): boolean {
   return /\b(replace|replacing|replacement|replacements|swap out|swap|trade out|substitute)\b/i.test(text);
 }
 
+function hasStandaloneReplacementNoun(text: string): boolean {
+  return /\breplacements?\b/i.test(text) && !/\b(replace|replacing|swap out|swap|trade out|substitute)\b/i.test(text);
+}
+
 export function containsRemoveIntent(text: string): boolean {
   if (/\b(?:without\b(?:.{0,40})?\bremov(?:e|ing)|not\s+remov(?:e|ing)|don't\s+remove|do not\s+remove|never\s+remove)\b/i.test(text)) {
     return false;
@@ -255,6 +259,7 @@ export function containsExplicitReorderIntent(text: string): boolean {
 
 export function inferLexedClauseOperations(clause: string): LexedOperationKind[] {
   const matches: Array<{ index: number; kind: LexedOperationKind }> = [];
+  const addOnlyReplacementNoun = containsAddIntent(clause) && hasStandaloneReplacementNoun(clause);
   const patterns: Array<[LexedOperationKind, RegExp]> = [
     ["analyze", /\b(review|analy[sz]e|critique|what(?:'s| is) working|what should happen next)\b/i],
     ["replace", /\b(replace|replacing|replacement|replacements|swap out|swap|trade out|substitute)\b/i],
@@ -271,6 +276,9 @@ export function inferLexedClauseOperations(clause: string): LexedOperationKind[]
       continue;
     }
     if (kind === "replace" && !containsReplaceIntent(clause)) {
+      continue;
+    }
+    if (kind === "replace" && addOnlyReplacementNoun) {
       continue;
     }
     if (kind === "reorder" && !containsExplicitReorderIntent(clause)) {

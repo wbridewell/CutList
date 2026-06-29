@@ -135,6 +135,12 @@ function buildStepPlan(
     ...context.playlist,
     constraints: context.persistedConstraints
   };
+  const carriesForwardPreGenerationRemovals = step.kind === "add" &&
+    plan.preGenerationRemovalPlan.removedTracks.length > 0 &&
+    JSON.stringify(playlistWithConstraints.tracks.map((track) => track.id)) === JSON.stringify(plan.preGenerationRemovalPlan.baseTracks.map((track) => track.id));
+  const preGenerationRemovalPlan = carriesForwardPreGenerationRemovals
+    ? plan.preGenerationRemovalPlan
+    : buildPreGenerationRemovalPlan(playlistWithConstraints, step.originText, context.activeConstraints);
   return {
     ...plan,
     playlist: playlistWithConstraints,
@@ -155,7 +161,7 @@ function buildStepPlan(
     targetTotalTrackCount: step.targetTotalTrackCount ?? plan.targetTotalTrackCount,
     replacementCount: step.replacementCount ?? plan.replacementCount,
     constraintState: buildStepConstraintState(plan.constraintState, playlistWithConstraints, context.activeConstraints, context.persistedConstraints),
-    preGenerationRemovalPlan: buildPreGenerationRemovalPlan(playlistWithConstraints, step.originText, context.activeConstraints),
+    preGenerationRemovalPlan,
     replacementMode: plan.replacementMode,
     requestedReplacementAlbum: plan.requestedReplacementAlbum,
     replacementTarget: plan.replacementTarget,
@@ -409,13 +415,14 @@ function deterministicWorkflowSummary(stepResults: StepExecutionResult[]): strin
   const hadReorder = contentSteps.some((step) => step.playlistAction === "reorder");
   const hadAddOrReplace = contentSteps.some((step) => step.stepKind === "add" || step.stepKind === "replace");
   const failedSteps = contentSteps.filter((step) => step.failed);
+  const versionCleanupMessage = contentSteps.find((step) => /alternate version/i.test(step.message))?.message ?? null;
   const parts: string[] = [];
 
   if (hadReorder) {
     parts.push("Reordered the playlist to separate repeated artists and improve the spacing.");
   }
   if (totalRemoved > 0) {
-    parts.push(`Removed ${totalRemoved} track${totalRemoved === 1 ? "" : "s"} from the playlist.`);
+    parts.push(versionCleanupMessage ?? `Removed ${totalRemoved} track${totalRemoved === 1 ? "" : "s"} from the playlist.`);
   }
   if (hadAddOrReplace && totalAccepted > 0) {
     parts.push(`Verified and accepted ${totalAccepted} track${totalAccepted === 1 ? "" : "s"}.`);

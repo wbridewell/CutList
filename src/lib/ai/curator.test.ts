@@ -214,7 +214,7 @@ describe("curator LLM boundaries", () => {
     expect(verifyTracks).not.toHaveBeenCalled();
     expect(result.message).toContain("removed 1 alternate version");
     expect(result.playlistUpdate?.action).toBe("set");
-    expect(result.playlistUpdate?.tracks.map((track) => track.title)).toEqual(["Forty Six & 2", "Schism", "Sober", "Aenema"]);
+    expect(result.playlistUpdate?.tracks.map((track) => track.title)).toEqual(["Schism", "Forty Six & 2", "Sober", "Aenema"]);
   });
 
   it("does not treat comma-separated starter prompt prose as pasted tracks", async () => {

@@ -233,7 +233,9 @@ export async function executeRemovalPlan(
 
   return {
     message: allRemovedTracks.length > 0
-      ? `Removed ${allRemovedTracks.length} track${allRemovedTracks.length === 1 ? "" : "s"} that violated the updated constraints.`
+      ? plan.preGenerationRemovalPlan.versionCleanup
+        ? `I kept the best versions and removed ${allRemovedTracks.length} alternate version${allRemovedTracks.length === 1 ? "" : "s"}.`
+        : `Removed ${allRemovedTracks.length} track${allRemovedTracks.length === 1 ? "" : "s"} that violated the updated constraints.`
       : "No existing tracks violated the updated constraints, so nothing was removed.",
     playlistUpdate: allRemovedTracks.length > 0
       ? {
