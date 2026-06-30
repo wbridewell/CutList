@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { resolveNamedTrack } from "@/lib/playlist/requestPlacement";
+import { bindDeclaredTrackPlacement, resolveNamedTrack } from "@/lib/playlist/requestPlacement";
+import { detectDeclaredTrackPlacement } from "@/lib/playlist/requestPlacement";
 import type { PlaylistState } from "@/types/playlist";
 
 const playlist: PlaylistState = {
@@ -53,6 +54,58 @@ describe("resolveNamedTrack", () => {
       }]
     }, "Days of Swine and Roses")).toMatchObject({
       trackId: "itunes:264135997",
+      resolution: "exact"
+    });
+  });
+});
+
+describe("bridge placement parsing", () => {
+  it("treats named bridge requests as insertion after the first anchor track", () => {
+    const placed = bindDeclaredTrackPlacement(
+      {
+        ...playlist,
+        tracks: [
+          playlist.tracks[0],
+          {
+            ...playlist.tracks[0],
+            id: "itunes:2",
+            title: "White Rabbit",
+            artist: "Jefferson Airplane"
+          }
+        ]
+      },
+      detectDeclaredTrackPlacement("Find 2 verified bridge tracks between New Order - Blue Monday and Jefferson Airplane - White Rabbit.")
+    );
+
+    expect(placed).toMatchObject({
+      mode: "after_track",
+      anchorQuery: "New Order - Blue Monday",
+      anchorTrackId: "itunes:264135997",
+      resolution: "exact"
+    });
+  });
+
+  it("treats put-between requests as insertion after the first anchor track", () => {
+    const placed = bindDeclaredTrackPlacement(
+      {
+        ...playlist,
+        tracks: [
+          playlist.tracks[0],
+          {
+            ...playlist.tracks[0],
+            id: "itunes:2",
+            title: "White Rabbit",
+            artist: "Jefferson Airplane"
+          }
+        ]
+      },
+      detectDeclaredTrackPlacement("Put two tracks between New Order - Blue Monday and Jefferson Airplane - White Rabbit.")
+    );
+
+    expect(placed).toMatchObject({
+      mode: "after_track",
+      anchorQuery: "New Order - Blue Monday",
+      anchorTrackId: "itunes:264135997",
       resolution: "exact"
     });
   });

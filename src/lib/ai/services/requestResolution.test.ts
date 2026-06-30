@@ -162,6 +162,48 @@ describe("request resolution step planning", () => {
     expect(plan.constraintState.persistedConstraintsAfterSuccess.requiredArtists).toBeUndefined();
   });
 
+  it("binds named bridge requests to insertion after the first anchor track", async () => {
+    const bridgePlan = await resolveCuratorRequestPlan(
+      {
+        ...playlist,
+        tracks: [
+          track("track-1", "Candle", "Skinny Puppy"),
+          track("track-2", "White Rabbit", "Jefferson Airplane")
+        ]
+      },
+      "Find 2 verified bridge tracks between Skinny Puppy - Candle and Jefferson Airplane - White Rabbit."
+    );
+
+    expect(bridgePlan.operation).toBe("generate");
+    expect(bridgePlan.addPlacement).toMatchObject({
+      mode: "after_track",
+      anchorQuery: "Skinny Puppy - Candle",
+      anchorTrackId: "track-1",
+      resolution: "exact"
+    });
+  });
+
+  it("binds put-between requests to insertion after the first anchor track", async () => {
+    const bridgePlan = await resolveCuratorRequestPlan(
+      {
+        ...playlist,
+        tracks: [
+          track("track-1", "Candle", "Skinny Puppy"),
+          track("track-2", "White Rabbit", "Jefferson Airplane")
+        ]
+      },
+      "Put two tracks between Skinny Puppy - Candle and Jefferson Airplane - White Rabbit."
+    );
+
+    expect(bridgePlan.operation).toBe("generate");
+    expect(bridgePlan.addPlacement).toMatchObject({
+      mode: "after_track",
+      anchorQuery: "Skinny Puppy - Candle",
+      anchorTrackId: "track-1",
+      resolution: "exact"
+    });
+  });
+
   it("resolves the weak-link review prompt as reorder if it ever reaches curator planning", async () => {
     const plan = await resolveCuratorRequestPlan(
       playlist,

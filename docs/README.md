@@ -1,6 +1,7 @@
 # Documentation
 
 - [Usage](USAGE.md)
+- [Demo video script](DEMO_VIDEO_SCRIPT.md)
 - [First-run alpha](FIRST_RUN_ALPHA.md)
 - [Product strategy](PRODUCT_STRATEGY.md)
 - [Product roadmap (2026-06-13)](ROADMAP_2026-06-13.md)

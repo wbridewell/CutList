@@ -75,6 +75,10 @@ export function extractNamedTransitionPair(userMessage: string): { fromText: str
     /\b(?:repair|fix)?\b[\s\S]{0,120}\btransition\b[\s\S]{0,120}\bfrom\b\s+(?:"([^"\n]+)"|'([^'\n]+)')\s+\binto\b\s+(?:"([^"\n]+)"|'([^'\n]+)')/i
   ) ?? userMessage.match(
     /\b(?:repair|fix)\b[\s\S]{0,120}\bfrom\b\s+(?:"([^"\n]+)"|'([^'\n]+)')\s+\binto\b\s+(?:"([^"\n]+)"|'([^'\n]+)')/i
+  ) ?? userMessage.match(
+    /\bbridge(?:\s+tracks?)?\b[\s\S]{0,120}\bbetween\b\s+(?:"([^"\n]+)"|'([^'\n]+)')\s+\band\b\s+(?:"([^"\n]+)"|'([^'\n]+)')/i
+  ) ?? userMessage.match(
+    /\b(?:add|adding|insert|place|put|slot|drop in|bring in|queue|find|give me|recommend|suggest)\b[\s\S]{0,120}\bbetween\b\s+(?:"([^"\n]+)"|'([^'\n]+)')\s+\band\b\s+(?:"([^"\n]+)"|'([^'\n]+)')/i
   );
   if (quotedMatch) {
     const fromText = captureNamedGroups(quotedMatch[1], quotedMatch[2]);
@@ -85,7 +89,9 @@ export function extractNamedTransitionPair(userMessage: string): { fromText: str
   }
 
   const bareMatch = userMessage.match(/\b(?:repair|fix)?\b[\s\S]{0,120}\btransition\b[\s\S]{0,120}\bfrom\b\s+([^.\n]+?)\s+\binto\b\s+([^.\n]+?)(?=[.!?\n]|$)/i)
-    ?? userMessage.match(/\b(?:repair|fix)\b[\s\S]{0,120}\bfrom\b\s+([^.\n]+?)\s+\binto\b\s+([^.\n]+?)(?=[.!?\n]|$)/i);
+    ?? userMessage.match(/\b(?:repair|fix)\b[\s\S]{0,120}\bfrom\b\s+([^.\n]+?)\s+\binto\b\s+([^.\n]+?)(?=[.!?\n]|$)/i)
+    ?? userMessage.match(/\bbridge(?:\s+tracks?)?\b[\s\S]{0,120}\bbetween\b\s+([^.\n]+?)\s+\band\b\s+([^.\n]+?)(?=[.!?\n]|$)/i)
+    ?? userMessage.match(/\b(?:add|adding|insert|place|put|slot|drop in|bring in|queue|find|give me|recommend|suggest)\b[\s\S]{0,120}\bbetween\b\s+([^.\n]+?)\s+\band\b\s+([^.\n]+?)(?=[.!?\n]|$)/i);
   if (!bareMatch) {
     return null;
   }
@@ -340,6 +346,14 @@ export function parseDeclaredTrackPlacement(userMessage: string): DeclaredTrackP
     return {
       mode: "before_track",
       anchorQuery: beforeValue
+    };
+  }
+
+  const namedTransition = extractNamedTransitionPair(userMessage);
+  if (namedTransition) {
+    return {
+      mode: "after_track",
+      anchorQuery: namedTransition.fromText
     };
   }
 
