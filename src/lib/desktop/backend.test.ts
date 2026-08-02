@@ -5,7 +5,6 @@ import { join } from "node:path";
 import { readLocalLLMSettings } from "@/lib/ai/llmConfig";
 import {
   getDesktopLlmSetup,
-  getDesktopWorkspaceState,
   saveDesktopLlmSetup,
   saveDesktopWorkspaceState,
   testDesktopLlmSetup
@@ -45,11 +44,10 @@ describe("desktop backend service", () => {
     expect(JSON.stringify(response)).not.toContain("ApiKey");
   });
 
-  it("saves llm settings without returning secrets", () => {
+  it("saves llm settings without persisting api keys locally", () => {
     const response = saveDesktopLlmSetup({
       provider: "gemini",
       model: "gemini-2.5-flash-lite",
-      apiKey: "secret-gemini-key",
       timeoutMs: 180000,
       llmAssistedMatchReviewEnabled: false,
       curatorPersona: "firestarter"
@@ -57,26 +55,40 @@ describe("desktop backend service", () => {
 
     expect(readLocalLLMSettings()).toMatchObject({
       provider: "gemini",
-      geminiApiKey: "secret-gemini-key",
       geminiModel: "gemini-2.5-flash-lite",
       timeoutMs: 180000,
       llmAssistedMatchReviewEnabled: false,
       curatorPersona: "firestarter"
     });
-    expect(JSON.stringify(response)).not.toContain("secret-gemini-key");
+    expect(readLocalLLMSettings()).not.toHaveProperty("geminiApiKey");
     expect(response.status).toMatchObject({
-      configured: true,
-      keySource: "local",
+      configured: false,
+      keySource: "missing",
       llmAssistedMatchReviewEnabled: false,
       curatorPersona: "firestarter"
+    });
+  });
+
+  it("reports configured status once Rust has injected a keychain key", () => {
+    vi.stubEnv("GEMINI_API_KEY", "keychain-gemini-key");
+    vi.stubEnv("CUTLIST_GEMINI_KEY_SOURCE", "1");
+
+    const response = saveDesktopLlmSetup({
+      provider: "gemini",
+      model: "gemini-2.5-flash-lite"
+    });
+
+    expect(JSON.stringify(response)).not.toContain("keychain-gemini-key");
+    expect(response.status).toMatchObject({
+      configured: true,
+      keySource: "keychain"
     });
   });
 
   it("saves curator persona without replacing provider settings", () => {
     saveDesktopLlmSetup({
       provider: "gemini",
-      model: "gemini-2.5-flash-lite",
-      apiKey: "secret-gemini-key"
+      model: "gemini-2.5-flash-lite"
     });
 
     const response = saveDesktopLlmSetup({ curatorPersona: "archivist" });
@@ -95,18 +107,16 @@ describe("desktop backend service", () => {
   it("tests the saved setup and returns a friendly status", async () => {
     const response = await testDesktopLlmSetup({
       provider: "gemini",
-      model: "gemini-2.5-flash",
-      apiKey: "secret-gemini-key"
+      model: "gemini-2.5-flash"
     });
 
     expect(response).toMatchObject({
       ok: true,
       message: "LLM connection works. The Curator is ready to build playlists."
     });
-    expect(JSON.stringify(response)).not.toContain("secret-gemini-key");
   });
 
-  it("round-trips native workspace state", () => {
+  it("normalizes and returns saved workspace state", () => {
     const state = {
       version: 1 as const,
       draft: null,
@@ -115,6 +125,5 @@ describe("desktop backend service", () => {
     };
 
     expect(saveDesktopWorkspaceState(state)).toEqual({ state });
-    expect(getDesktopWorkspaceState()).toEqual({ state });
   });
 });

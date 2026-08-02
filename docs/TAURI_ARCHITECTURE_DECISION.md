@@ -131,14 +131,12 @@ The main desktop security improvement is not a Rust rewrite. It is tightening th
 Priorities:
 
 1. Keep provider calls and API keys out of the React/webview layer.
-2. Move secrets from local JSON into OS keychain storage before broader distribution.
+2. ~~Move secrets from local JSON into OS keychain storage before broader distribution.~~ Done. Provider API keys live in the OS keychain (`src-tauri/src/secrets.rs`, backed by the `keyring` crate); Rust injects a stored key into the backend child process env at spawn time, and there is no command that reads a key back out to the webview. Non-secret settings (provider, model, timeout, persona) remain in the local JSON file. A one-time startup migration moves any plaintext keys left over from before this change into the keychain and strips them from the file.
 3. Keep Tauri permissions narrow.
 4. Prefer explicit command contracts with Zod/schema validation.
 5. Treat filesystem access as privileged.
 6. Use native dialogs for user-mediated file access where appropriate.
 7. Keep external network calls in the trusted backend/service layer.
-
-Local JSON settings are acceptable for private development and technical alpha testing with a documented warning. Before any non-technical alpha, public alpha, or distribution to users who may paste real hosted-provider API keys, secrets should move to OS keychain storage or an equivalent secure credential store.
 
 ## Portability Direction
 
@@ -154,7 +152,7 @@ To preserve that option:
 
 Future web deployment is a valuable option, not the primary architecture driver.
 
-Future web deployment should remain possible through a real but thin adapter boundary. `src/lib/client/playlistApi.ts` should either be renamed to make its desktop role explicit or split into a platform-neutral interface plus a Tauri implementation when the next related refactor touches it.
+Future web deployment should remain possible through a real but thin adapter boundary. `src/lib/client/desktopPlaylistBridge.ts` (renamed from `playlistApi.ts` to make its desktop role explicit) should be split into a platform-neutral interface plus a Tauri implementation when the next related refactor touches it.
 
 ## Process Model
 
@@ -169,6 +167,8 @@ Before changing the process model, measure:
 * perceived UI delay
 
 If timing logs show command startup materially affects UX, the preferred next experiment is a long-lived local sidecar/worker using the same TypeScript service layer and command contracts. A Rust rewrite is not the next step unless the sidecar model also fails or packaging/runtime constraints become decisive.
+
+**Measured (2026-08-01):** packaged backend roundtrip is ~90ms warm and ~2.5s on the first cold spawn after launch; the dev-mode tsx-transpiled backend runs ~400-500ms per command. The packaged warm-path number does not justify a sidecar; the cold-start cost is a one-time launch-time cost, not a per-command one. Keep the current process-per-command model. Revisit only if per-command latency in packaged builds is independently reported as a problem.
 
 ## Refactor Rules
 
@@ -204,8 +204,8 @@ If the answer is mostly “no,” keep it in TypeScript.
 
 Near-term improvements should focus on boundary quality rather than rewrites:
 
-* add timing logs for command startup and backend phases
-* move secrets to OS keychain
+* ~~add timing logs for command startup and backend phases~~ — done; see the measurement under Process Model above
+* ~~move secrets to OS keychain~~ — done; see Security Direction above
 * add native save/open dialogs where desktop polish matters
 * clarify naming around client API adapters
 * document trusted-backend-only modules

@@ -51,7 +51,7 @@ The release build is the single packaging entry point:
 npm run build:dmg
 ```
 
-Release packaging uses the bundled portable Node when available. Set `CUTLIST_NODE_RUNTIME_PATH` only when you need to override it with a different standalone macOS Node binary. The staging script fails fast instead of bundling a non-portable runtime.
+Release packaging uses the bundled portable Node when available. That default only exists on the maintainer's machine; on any other machine, set `CUTLIST_NODE_RUNTIME_PATH` to a portable macOS Node binary. Download the "Prebuilt binaries" `.tar.gz` (not the installer) from [nodejs.org/en/download](https://nodejs.org/en/download), extract it, and point the variable at `<extracted-dir>/bin/node`. The staging script fails fast with this same guidance instead of bundling a non-portable runtime.
 
 That command must keep doing all four jobs together:
 
@@ -129,6 +129,15 @@ Tester instructions should say:
 4. Confirm the warning.
 5. Use `LLM setup` in the app to configure Gemini. Optionally set `Curator persona` beside it.
 
+## If Something Fails
+
+The app writes a redacted log of backend commands (LLM generation, verification, import, export) to `Help > Show Logs in Finder`. Provider keys and tokens are stripped before anything is written.
+
+If a tester reports a failure, ask them to:
+
+1. Open `Help > Show Logs in Finder` in the app.
+2. Attach `cutlist.log` (and `cutlist.log.1` if present) to the bug report.
+
 ## Smoke Test Checklist
 
 Smoke-test the DMG on a clean macOS user account or another Mac:
@@ -141,9 +150,10 @@ Smoke-test the DMG on a clean macOS user account or another Mac:
 6. Export one playlist file.
 7. Quit and relaunch the app.
 8. Confirm the local draft and settings are still present.
+9. Open `Help > Show Logs in Finder` and confirm `cutlist.log` exists and contains command entries with no visible API keys.
 
 ## Security Notes
 
-- Cloud API keys must stay in the local backend/settings layer, not in frontend state, browser storage, or bundled files.
+- Cloud API keys are stored in the OS keychain, not in frontend state, browser storage, bundled files, or a settings file.
 - The unsigned alpha is appropriate for trusted testers only.
-- Signing, notarization, auto-update, and OS keychain storage are follow-up milestones before broader distribution.
+- Signing, notarization, and auto-update are follow-up milestones before broader distribution.

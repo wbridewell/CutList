@@ -27,10 +27,7 @@ import {
 } from "@/lib/playlist/schemas";
 import { exportPlaylist } from "@/lib/playlist/io/exports";
 import { parsePersistedWorkspaceState, type PersistedWorkspaceStateV1 } from "@/lib/playlist/io/localDraft";
-import {
-  readDesktopWorkspaceState,
-  writeDesktopWorkspaceState
-} from "@/lib/playlist/io/desktopWorkspaceState";
+import { writeDesktopWorkspaceState } from "@/lib/playlist/io/desktopWorkspaceState";
 import { verifyTracks } from "@/lib/music/verifyTrack";
 import { resolveUserRequestPlan } from "@/lib/ai/services/userRequestPlan";
 import type {
@@ -46,9 +43,11 @@ import type {
   LLMSetupTestResponse
 } from "@/lib/desktop/contracts";
 
+// No apiKey field: provider keys are stored in the OS keychain by the Rust
+// desktop_set_provider_secret command, called directly from the client before this
+// command runs. See saveLLMSetup in src/lib/client/llmSetupApi.ts.
 const SaveLLMSettingsSchema = z.object({
   provider: z.enum(["gemini", "openai", "ollama", "none"]).optional(),
-  apiKey: z.string().trim().optional(),
   model: z.string().trim().min(1).max(120).optional(),
   timeoutMs: z.number().int().min(10_000).max(600_000).optional(),
   ollamaBaseUrl: z.string().trim().url().optional(),
@@ -65,15 +64,9 @@ function localSettingsForPayload(input: z.infer<typeof SaveLLMSettingsSchema>): 
   };
   if (input.provider === "gemini") {
     update.geminiModel = input.model;
-    if (input.apiKey) {
-      update.geminiApiKey = input.apiKey;
-    }
   }
   if (input.provider === "openai") {
     update.openaiModel = input.model;
-    if (input.apiKey) {
-      update.openaiApiKey = input.apiKey;
-    }
   }
   if (input.provider === "ollama") {
     update.ollamaModel = input.model;
@@ -180,12 +173,6 @@ export async function desktopPlanUserRequest(payload: DesktopUserRequestPlanPayl
 export function desktopExportPlaylist(payload: DesktopExportPayload) {
   const input = ExportRequestSchema.parse(payload);
   return ExportResponseSchema.parse(exportPlaylist(input.playlist, input.format));
-}
-
-export function getDesktopWorkspaceState(): DesktopWorkspaceStateResponse {
-  return {
-    state: readDesktopWorkspaceState()
-  };
 }
 
 function normalizeWorkspaceState(input: PersistedWorkspaceStateV1 | null): PersistedWorkspaceStateV1 | null {

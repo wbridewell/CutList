@@ -15,7 +15,7 @@ The core rule is: the LLM proposes, providers verify, constraints enforce, and t
 - Layout: `src/app/layout.tsx`
 - Desktop command contract: `src/lib/desktop/contracts.ts`
 - Desktop backend service: `src/lib/desktop/backend.ts`
-- Client API wrapper: `src/lib/client/playlistApi.ts`
+- Client API wrapper: `src/lib/client/desktopPlaylistBridge.ts`
 - Client workflow composition: `src/lib/client/workflows.ts`
 
 ## Domain Layout

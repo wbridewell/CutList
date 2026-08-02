@@ -2,12 +2,19 @@
 
 import { useEffect, useState } from "react";
 import {
+  deleteLLMProviderSecret,
   getLLMSetup,
   saveLLMSetup,
+  setLLMProviderSecret,
   testLLMSetup,
+  type KeychainProvider,
   type LLMProvider,
   type LLMSetupStatus
 } from "@/lib/client/llmSetupApi";
+
+function keychainProviderFor(provider: LLMProvider): KeychainProvider | null {
+  return provider === "gemini" || provider === "openai" ? provider : null;
+}
 
 const providerOptions: Array<{
   label: string;
@@ -27,6 +34,21 @@ function defaultModel(provider: LLMProvider): string {
 
 function providerRequiresKey(provider: LLMProvider): boolean {
   return providerOptions.find((option) => option.provider === provider)?.requiresKey ?? false;
+}
+
+// status is fetched for whichever provider was active/saved at fetch time, so its
+// keyPresent/keySource fields describe status.provider, not necessarily whatever the
+// user has since picked in the provider dropdown. Gate on a provider match before
+// trusting them, so switching providers can't show a stale "remove saved key" action
+// (or its placeholder) for a provider status was never actually checked against.
+export function apiKeyFieldPlaceholder(status: LLMSetupStatus | null, provider: LLMProvider): string {
+  return status?.provider === provider && status.keyPresent
+    ? "Key already saved in keychain; leave blank to keep it"
+    : "Paste API key";
+}
+
+export function shouldOfferRemoveSavedKey(status: LLMSetupStatus | null, provider: LLMProvider): boolean {
+  return status?.provider === provider && status.keyPresent && status.keySource === "keychain";
 }
 
 function setupMeta(status: LLMSetupStatus | null, loading: boolean): string {
@@ -70,7 +92,7 @@ export function LlmSetupButton({ initialOpen = false }: Props) {
     if (currentProvider === "none") {
       return "No LLM turns off playlist generation and critique, but import, export, and verified track tools still work.";
     }
-    return "For this local alpha, API keys are saved only on this machine in a local app settings file. Gemini is the easiest first-run path.";
+    return "API keys are stored in your system keychain, not in a settings file. Gemini is the easiest first-run path.";
   }
 
   async function refreshSetup() {
@@ -103,21 +125,29 @@ export function LlmSetupButton({ initialOpen = false }: Props) {
     }
   }
 
+  async function storeEnteredKeyIfAny() {
+    const trimmedKey = apiKey.trim();
+    const keychainProvider = keychainProviderFor(provider);
+    if (trimmedKey && keychainProvider) {
+      await setLLMProviderSecret(keychainProvider, trimmedKey);
+    }
+  }
+
   async function saveSetup() {
     setSaving(true);
     setNotice(null);
     try {
+      await storeEnteredKeyIfAny();
       const result = await saveLLMSetup({
         provider,
         model,
         timeoutMs,
         ollamaBaseUrl,
-        apiKey: apiKey.trim() || undefined,
         llmAssistedMatchReviewEnabled
       });
       setStatus(result.status);
       setApiKey("");
-      setNotice("Saved setup locally. API keys stay on this machine.");
+      setNotice("Saved setup. API keys are stored in your system keychain, not in a settings file.");
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Could not save LLM setup.");
     } finally {
@@ -129,12 +159,12 @@ export function LlmSetupButton({ initialOpen = false }: Props) {
     setTesting(true);
     setNotice(null);
     try {
+      await storeEnteredKeyIfAny();
       const result = await testLLMSetup({
         provider,
         model,
         timeoutMs,
         ollamaBaseUrl,
-        apiKey: apiKey.trim() || undefined,
         llmAssistedMatchReviewEnabled
       });
       setStatus(result.status);
@@ -144,6 +174,25 @@ export function LlmSetupButton({ initialOpen = false }: Props) {
       setNotice(error instanceof Error ? error.message : "Could not test LLM setup.");
     } finally {
       setTesting(false);
+    }
+  }
+
+  async function removeSavedKey() {
+    const keychainProvider = keychainProviderFor(provider);
+    if (!keychainProvider) {
+      return;
+    }
+    setSaving(true);
+    setNotice(null);
+    try {
+      await deleteLLMProviderSecret(keychainProvider);
+      const result = await getLLMSetup();
+      setStatus(result.status);
+      setNotice("Removed the saved key from your system keychain.");
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Could not remove the saved key.");
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -194,11 +243,16 @@ export function LlmSetupButton({ initialOpen = false }: Props) {
                   <span>{provider === "gemini" ? "Gemini API key" : "OpenAI API key"}</span>
                   <input
                     autoComplete="off"
-                    placeholder={status?.keyPresent ? "Key already saved; leave blank to keep it" : "Paste API key"}
+                    placeholder={apiKeyFieldPlaceholder(status, provider)}
                     type="password"
                     value={apiKey}
                     onChange={(event) => setApiKey(event.target.value)}
                   />
+                  {shouldOfferRemoveSavedKey(status, provider) ? (
+                    <button className="button-secondary button-compact" disabled={saving || testing} type="button" onClick={() => void removeSavedKey()}>
+                      Remove saved key
+                    </button>
+                  ) : null}
                 </label>
               ) : null}
               {provider === "ollama" ? (

@@ -13,7 +13,8 @@ export const realTrackCandidateGuidance = [
   "You propose only known, real, commercially released tracks that are likely indexed by common music metadata providers.",
   "For vibe-based requests, translate the vibe into real artists and real catalog tracks; do not generate atmospheric title/artist names.",
   "Do not literalize invented vibe phrases into new-sounding artist names or track titles; when a vibe mentions a place, use established real artists with matching sound instead of place-name inventions.",
-  "Prefer recognizable catalog recordings over obscure deep cuts unless the user explicitly asks for deep cuts."
+  "Prefer the primary studio or single release of a track over live recordings, remixes, alternate takes, demos, or bootlegs, unless the user explicitly asks for one of those.",
+  "This is about picking the standard, streaming-catalog version of a track, not a preference for famous or iconic songs over lesser-known ones. Choose whichever real tracks best fit the request's vibe, mood, and function, regardless of how famous they are."
 ];
 
 export const verifiedMetadataGuidance = [

@@ -8,7 +8,7 @@ import { createPlaylistHealth } from "@/components/playlist/playlistHealth";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { appCommandIds, dispatchAppCommand, exportCommandId, labelForCommand, registerAppCommand } from "@/lib/client/appCommands";
 import { revealDesktopPath } from "@/lib/client/desktopApi";
-import { downloadPlaylistExport } from "@/lib/client/playlistApi";
+import { downloadPlaylistExport } from "@/lib/client/desktopPlaylistBridge";
 import { exportFormatRegistry } from "@/lib/playlist/io/exports";
 import type { PlaylistExportFormat } from "@/lib/playlist/io/exportFormats";
 import {

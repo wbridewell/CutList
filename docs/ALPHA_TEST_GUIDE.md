@@ -47,7 +47,7 @@ When the app opens:
 
 - This is a local alpha, not a polished signed app yet.
 - Track verification can reject real songs when provider metadata is incomplete or ambiguous.
-- API keys are stored locally for convenience, not in the OS keychain yet.
+- API keys are stored in the OS keychain, not in a local settings file.
 - Browser mode is not the main alpha path; the desktop app is the intended workflow.
 
 ## If Something Goes Wrong

@@ -1098,8 +1098,8 @@ describe("curator LLM boundaries", () => {
 
     expect(getJsonFromLLM).toHaveBeenCalledTimes(2);
     const retryPrompt = vi.mocked(getJsonFromLLM).mock.calls[1][0] as string;
-    expect(retryPrompt).toContain("Prefer canonical, widely released studio tracks");
-    expect(retryPrompt).toContain("Avoid live versions, remasters, alternate mixes");
+    expect(retryPrompt).toContain("Prefer the primary studio release of a track");
+    expect(retryPrompt).toContain("live versions, remasters, alternate mixes");
     expect(retryPrompt).toContain("Previous rejected candidates in this request");
     expect(retryPrompt).toContain("Rejected because No credible metadata match was found.");
     expect(retryPrompt).toContain("- C - Bad");

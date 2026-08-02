@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { desktopCommandNames, desktopProgressEventName } from "@/lib/desktop/contracts";
-import { downloadPlaylistExport, sendPlaylistMessageStream } from "@/lib/client/playlistApi";
+import { downloadPlaylistExport, sendPlaylistMessageStream } from "@/lib/client/desktopPlaylistBridge";
 import type { CuratorResponse } from "@/types/playlist";
 
 const invokeMock = vi.fn();

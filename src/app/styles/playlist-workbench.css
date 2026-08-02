@@ -136,6 +136,7 @@
 }
 
 .playlist-track-scroll {
+  align-content: start;
   display: grid;
   flex: 1 1 auto;
   gap: 0;

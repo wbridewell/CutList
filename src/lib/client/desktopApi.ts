@@ -3,11 +3,14 @@
 import {
   desktopCommandNames,
   desktopProgressEventName,
+  type DeleteProviderSecretPayload,
   type DesktopBackendResultMap,
+  type DesktopErrorCode,
   type DesktopExportResult,
   type DesktopProgressPayload,
   type DesktopPlaylistMessagePayload,
-  type DesktopRevealPathPayload
+  type DesktopRevealPathPayload,
+  type SetProviderSecretPayload
 } from "@/lib/desktop/contracts";
 import { emitReviewRoutingTrace } from "@/lib/debug/reviewRouting";
 import { getTauriCore, getTauriEvent } from "@/lib/client/tauriRuntime";
@@ -26,9 +29,49 @@ function requestId(): string {
     : `cutlist-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+// Thrown when a Tauri command rejects with a {code, message} DesktopError (see
+// src-tauri/src/main.rs and src/lib/desktop/errors.ts). Commands that don't spawn the
+// Node backend can still reject with a plain string, which normalizeDesktopError
+// leaves as an ordinary Error rather than forcing a code onto it.
+export class DesktopCommandError extends Error {
+  code: DesktopErrorCode;
+
+  constructor(code: DesktopErrorCode, message: string) {
+    super(message);
+    this.name = "DesktopCommandError";
+    this.code = code;
+  }
+}
+
+function isDesktopErrorShape(value: unknown): value is { code: string; message: string } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as { code?: unknown }).code === "string" &&
+    typeof (value as { message?: unknown }).message === "string"
+  );
+}
+
+export function normalizeDesktopError(error: unknown): Error {
+  if (isDesktopErrorShape(error)) {
+    return new DesktopCommandError(error.code as DesktopErrorCode, error.message);
+  }
+  if (error instanceof Error) {
+    return error;
+  }
+  if (typeof error === "string") {
+    return new Error(error);
+  }
+  return new Error("Desktop command failed.");
+}
+
 async function invokeDesktop<T>(command: string, payload?: unknown): Promise<T> {
   const { invoke } = await getTauriCore();
-  return invoke<T>(command, payload === undefined ? { payload: null } : { payload });
+  try {
+    return await invoke<T>(command, payload === undefined ? { payload: null } : { payload });
+  } catch (error) {
+    throw normalizeDesktopError(error);
+  }
 }
 
 export async function invokeDesktopMessage(
@@ -65,7 +108,7 @@ export async function invokeDesktopMessage(
     if (options.signal?.aborted) {
       throw new DOMException("Request interrupted.", "AbortError");
     }
-    throw error;
+    throw normalizeDesktopError(error);
   } finally {
     options.signal?.removeEventListener("abort", abort);
     unlisten();
@@ -116,4 +159,32 @@ export function revealDesktopPath(payload: DesktopRevealPathPayload) {
   return getTauriCore().then(({ invoke }) =>
     invoke<DesktopBackendResultMap["revealInFileManager"]>(desktopCommandNames.revealInFileManager, payload)
   );
+}
+
+export function invokeDesktopQuarantineWorkspaceState() {
+  return invokeDesktop<DesktopBackendResultMap["quarantineWorkspaceState"]>(desktopCommandNames.quarantineWorkspaceState);
+}
+
+export function invokeDesktopGetLogPath() {
+  return invokeDesktop<DesktopBackendResultMap["getLogPath"]>(desktopCommandNames.getLogPath);
+}
+
+// Talks directly to the Rust keychain commands, bypassing the Node backend entirely -
+// the secret never needs to reach a process that also writes JSON files to disk.
+export async function setDesktopProviderSecret(payload: SetProviderSecretPayload) {
+  const { invoke } = await getTauriCore();
+  try {
+    return await invoke<DesktopBackendResultMap["setProviderSecret"]>(desktopCommandNames.setProviderSecret, payload);
+  } catch (error) {
+    throw normalizeDesktopError(error);
+  }
+}
+
+export async function deleteDesktopProviderSecret(payload: DeleteProviderSecretPayload) {
+  const { invoke } = await getTauriCore();
+  try {
+    return await invoke<DesktopBackendResultMap["deleteProviderSecret"]>(desktopCommandNames.deleteProviderSecret, payload);
+  } catch (error) {
+    throw normalizeDesktopError(error);
+  }
 }

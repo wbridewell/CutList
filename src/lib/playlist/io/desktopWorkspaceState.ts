@@ -1,7 +1,8 @@
 import "server-only";
 
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { rmSync } from "node:fs";
+import { resolve } from "node:path";
+import { writeFileAtomicSync } from "@/lib/desktop/atomicFile";
 import {
   parsePersistedWorkspaceState,
   serializePersistedWorkspaceState,
@@ -22,19 +23,6 @@ function workspaceStatePath(): string {
   return resolve(process.cwd(), DESKTOP_WORKSPACE_STATE_FILE);
 }
 
-export function readDesktopWorkspaceState(): PersistedWorkspaceStateV1 | null {
-  const path = workspaceStatePath();
-  if (!existsSync(path)) {
-    return null;
-  }
-
-  try {
-    return parsePersistedWorkspaceState(readFileSync(path, "utf8"));
-  } catch {
-    return null;
-  }
-}
-
 export function writeDesktopWorkspaceState(state: PersistedWorkspaceStateV1 | null): PersistedWorkspaceStateV1 | null {
   const path = workspaceStatePath();
   const normalized = state ? parsePersistedWorkspaceState(serializePersistedWorkspaceState(state)) : null;
@@ -43,10 +31,6 @@ export function writeDesktopWorkspaceState(state: PersistedWorkspaceStateV1 | nu
     return null;
   }
 
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, serializePersistedWorkspaceState(normalized), {
-    encoding: "utf8",
-    mode: 0o600
-  });
+  writeFileAtomicSync(path, serializePersistedWorkspaceState(normalized));
   return normalized;
 }

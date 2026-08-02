@@ -4,7 +4,9 @@ import {
   sendPlaylistMessageStream,
   verifySeedTracks,
   type VerifySeedsResponse
-} from "@/lib/client/playlistApi";
+} from "@/lib/client/desktopPlaylistBridge";
+import { DesktopCommandError } from "@/lib/client/desktopApi";
+import type { DesktopErrorCode } from "@/lib/desktop/contracts";
 import { parseDiscoveryRadiusOverride } from "@/lib/playlist/discoveryRadius";
 import { bindDeclaredTrackPlacement, detectCanonicalReplacementTargetQuery, detectDeclaredTrackPlacement, resolveNamedTrack } from "@/lib/playlist/requestPlacement";
 import {
@@ -142,6 +144,32 @@ export function buildConversationContext(messages: ChatMessage[]): ConversationC
   return recentMessages.length > 0 ? { recentMessages } : undefined;
 }
 
+function messageForDesktopErrorCode(code: DesktopErrorCode): string | null {
+  switch (code) {
+    case "cancelled":
+      return "Stopped.";
+    case "llm_unconfigured":
+      return "LLM setup is incomplete or unavailable. Open LLM setup in the top-right, choose a provider, save it, and run Save and test. Your playlist is unchanged.";
+    case "llm_timeout":
+      return "The model took too long to respond. Your playlist is unchanged. Try again or raise the timeout in LLM setup.";
+    case "llm_malformed_response":
+      return "The model returned something CutList could not safely use. Your playlist is unchanged. Try again.";
+    case "provider_unreachable":
+      return "CutList could not reach the provider. Check your internet connection or local Ollama server, then try again. Your playlist is unchanged.";
+    case "runtime_missing":
+      return "The CutList desktop runtime is missing required files. Reinstall the app from the DMG, then try again.";
+    case "spawn_failed":
+    case "backend_protocol":
+      return "CutList could not reach its local backend. Restart the app and try again.";
+    case "export_failed":
+      return "CutList could not save the exported file. Try again or choose a different location.";
+    case "invalid_payload":
+    case "workspace_unreadable":
+    case "unknown":
+      return null;
+  }
+}
+
 export function errorMessageForWorkflow(error: unknown, fallbackMessage: string): string {
   const message = error instanceof Error
     ? error.message
@@ -154,6 +182,12 @@ export function errorMessageForWorkflow(error: unknown, fallbackMessage: string)
   }
   if (error instanceof Error && error.name === "AbortError") {
     return "Stopped.";
+  }
+  if (error instanceof DesktopCommandError) {
+    const codeMessage = messageForDesktopErrorCode(error.code);
+    if (codeMessage) {
+      return codeMessage;
+    }
   }
   if (/GEMINI_API_KEY|OPENAI_API_KEY|LLM provider is disabled|Gemini is not configured|OpenAI is unavailable|local LLM provider is unavailable/i.test(message)) {
     return "LLM setup is incomplete or unavailable. Open LLM setup in the top-right, choose a provider, save it, and run Save and test. Your playlist is unchanged.";
@@ -426,9 +460,15 @@ export function composeAnalyzeAssistantMessage(data: AnalyzePlaylistResponse, pl
     const labels = trackIds.map((trackId) => labelForTrackId(trackId));
     return labels.length > 0 ? labels.join("; ") : null;
   };
+  const labelForTransition = (fromTrackId: string, toTrackId: string): string => {
+    return `${labelForTrackId(fromTrackId)} -> ${labelForTrackId(toTrackId)}`;
+  };
+  const summaryWithTransitionLabel = (item: { fromTrackId: string; toTrackId: string; summary: string }): string => {
+    return `${labelForTransition(item.fromTrackId, item.toTrackId)}: ${item.summary}`;
+  };
   if (data.reviewMode === "focused_transition_repair" || data.reviewMode === "bridge_options_only") {
     const transitionText = data.transitionReview.length
-      ? `Transition diagnosis:\n${data.transitionReview.slice(0, 1).map((item) => `- ${item.summary} (${basisLabel(item.basis)})`).join("\n")}`
+      ? `Transition diagnosis:\n${data.transitionReview.slice(0, 1).map((item) => `- ${summaryWithTransitionLabel(item)} (${basisLabel(item.basis)})`).join("\n")}`
       : null;
     const suggestionText = data.reviewSuggestions.length
       ? `Bridge options:\n${data.reviewSuggestions.map((item) => {
@@ -442,7 +482,7 @@ export function composeAnalyzeAssistantMessage(data: AnalyzePlaylistResponse, pl
   if (data.reviewMode === "diagnose_only") {
     const evidenceText = [
       data.sequencingNotes.length ? `Evidence:\n${data.sequencingNotes.map((item) => `- ${item}`).join("\n")}` : null,
-      data.transitionReview.length ? `Transitions:\n${data.transitionReview.slice(0, 3).map((item) => `- ${item.summary} (${basisLabel(item.basis)})`).join("\n")}` : null
+      data.transitionReview.length ? `Transitions:\n${data.transitionReview.slice(0, 3).map((item) => `- ${summaryWithTransitionLabel(item)} (${basisLabel(item.basis)})`).join("\n")}` : null
     ].filter(Boolean).join("\n\n");
     return [data.curatorTake ?? data.message, evidenceText, debugText].filter(Boolean).join("\n\n");
   }
@@ -472,7 +512,7 @@ export function composeAnalyzeAssistantMessage(data: AnalyzePlaylistResponse, pl
     ? `Track roles:\n${data.trackRoles.slice(0, 6).map((item) => `- ${item.role}: ${item.rationale} (${basisLabel(item.basis)})`).join("\n")}`
     : null;
   const transitionText = data.transitionReview.length
-    ? `Transitions:\n${data.transitionReview.slice(0, 5).map((item) => `- ${item.issueType}: ${item.summary} (${basisLabel(item.basis)})`).join("\n")}`
+    ? `Transitions:\n${data.transitionReview.slice(0, 5).map((item) => `- ${item.issueType}: ${summaryWithTransitionLabel(item)} (${basisLabel(item.basis)})`).join("\n")}`
     : null;
   const suggestionText = data.reviewSuggestions.length
     ? `Suggested follow-ups:\n${data.reviewSuggestions.slice(0, 5).map((item) => `- ${item.type}: ${item.rationale} (${basisLabel(item.basis)})`).join("\n")}`

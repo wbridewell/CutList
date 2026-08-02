@@ -9,6 +9,7 @@ import { PlaylistPanel } from "@/components/PlaylistPanel";
 import { useLocalPlaylistDraft } from "@/hooks/useLocalPlaylistDraft";
 import { dispatchAppCommand, registerAppCommand, setAppCommandReporter, appCommandIds } from "@/lib/client/appCommands";
 import { ensureDesktopMenu } from "@/lib/client/desktopMenu";
+import { invokeDesktopGetLogPath, revealDesktopPath } from "@/lib/client/desktopApi";
 import { saveLLMSetup, type CuratorPersona } from "@/lib/client/llmSetupApi";
 import { useWorkspaceNavigation } from "@/hooks/useWorkspaceNavigation";
 import { activeRejectedCandidateCount, type ChatMessage, type RequestHistoryEntry } from "@/lib/playlist/collaboration";
@@ -73,7 +74,8 @@ function Workspace({ useDevFixture }: { useDevFixture: boolean }) {
     sessions,
     setHistory,
     setMessages,
-    setPlaylist
+    setPlaylist,
+    workspaceRecoveryNotice
   } = useLocalPlaylistDraft(
     useDevFixture ? devPlaylistFixture : initialPlaylist,
     useDevFixture ? devFixtureMessages : initialMessages,
@@ -109,6 +111,12 @@ function Workspace({ useDevFixture }: { useDevFixture: boolean }) {
   }, [commandNotice]);
 
   useEffect(() => {
+    if (workspaceRecoveryNotice) {
+      setCommandNotice({ tone: "bad", message: workspaceRecoveryNotice });
+    }
+  }, [workspaceRecoveryNotice]);
+
+  useEffect(() => {
     const unbind = [
       registerAppCommand(appCommandIds.openWorkspace, () => requestUtilitySection("session")),
       registerAppCommand(appCommandIds.importChat, () => {
@@ -131,6 +139,10 @@ function Workspace({ useDevFixture }: { useDevFixture: boolean }) {
       }),
       registerAppCommand(appCommandIds.showHelp, () => {
         window.open("https://github.com/wbridewell/CutList#readme", "_blank", "noopener,noreferrer");
+      }),
+      registerAppCommand(appCommandIds.showLogs, async () => {
+        const { path } = await invokeDesktopGetLogPath();
+        await revealDesktopPath({ path });
       }),
       registerAppCommand(appCommandIds.reportIssue, () => {
         window.open("https://github.com/wbridewell/CutList/issues/new", "_blank", "noopener,noreferrer");

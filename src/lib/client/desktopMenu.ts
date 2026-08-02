@@ -124,6 +124,7 @@ export async function ensureDesktopMenu(): Promise<void> {
       text: "Help",
       items: [
         commandItem(appCommandIds.showHelp, labelForCommand(appCommandIds.showHelp)),
+        commandItem(appCommandIds.showLogs, labelForCommand(appCommandIds.showLogs)),
         commandItem(appCommandIds.reportIssue, labelForCommand(appCommandIds.reportIssue)),
         await separator(),
         about

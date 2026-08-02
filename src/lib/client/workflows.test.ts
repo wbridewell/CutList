@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { DesktopCommandError } from "@/lib/client/desktopApi";
 import {
   effectiveDiscoveryRadiusForRequest,
   acceptManualMatchWorkflow,
@@ -10,6 +11,7 @@ import {
   composeMixedReviewAndCuratorAssistantMessage,
   createCompletedRequestMessages,
   createRequestMessageList,
+  errorMessageForWorkflow,
   promptForReviewSuggestion,
   reviewPromptForComposerRequest,
   runAnalyzeWorkflow,
@@ -477,11 +479,16 @@ describe("client workflows", () => {
     expect(message).toContain("Intent:");
     expect(message).toContain("Track roles:");
     expect(message).toContain("Transitions:");
+    expect(message).toContain("track-1 -> track-2: Needs connective tissue.");
     expect(message).toContain("Suggested follow-ups:");
     expect(message.indexOf("Playlist identity: Nocturnal pressure.")).toBeLessThan(message.indexOf("Intent: Rise without losing dread."));
   });
 
   it("renders focused transition repair reviews with named bridge tracks", () => {
+    const tracks = playlist([
+      track({ id: "track-1", artist: "The Prodigy", title: "Firestarter" }),
+      track({ id: "track-2", artist: "Portishead", title: "Roads" })
+    ]);
     const message = composeAnalyzeAssistantMessage(analysisResponse({
       reviewMode: "focused_transition_repair",
       curatorTake: "The handoff needs a cold decompression corridor.",
@@ -515,12 +522,35 @@ describe("client workflows", () => {
         },
         suggestedPrompt: "Add Nine Inch Nails - Closer as a bridge."
       }]
-    }));
+    }), tracks);
 
     expect(message).toContain("Bridge options:");
+    expect(message).toContain("The Prodigy - Firestarter -> Portishead - Roads");
     expect(message).toContain("Nine Inch Nails - Closer");
     expect(message).toContain("heavy hydraulic brake");
     expect(message).not.toContain("Curator judgment:");
+  });
+
+  it("includes track labels in diagnose-only transition summaries", () => {
+    const tracks = playlist([
+      track({ id: "track-1", artist: "Skinny Puppy", title: "Candle" }),
+      track({ id: "track-2", artist: "Jefferson Airplane", title: "White Rabbit" })
+    ]);
+    const message = composeAnalyzeAssistantMessage(analysisResponse({
+      reviewMode: "diagnose_only",
+      curatorTake: "The center is volatile but legible.",
+      transitionReview: [{
+        fromTrackId: "track-1",
+        toTrackId: "track-2",
+        issueType: "weak_bridge",
+        summary: "This sequence works well; both tracks share a dark, rhythmic, and confrontational quality.",
+        suggestedRepair: null,
+        confidence: "medium",
+        basis: "model_judgment"
+      }]
+    }), tracks);
+
+    expect(message).toContain("Skinny Puppy - Candle -> Jefferson Airplane - White Rabbit: This sequence works well");
   });
 
   it("includes track labels in weak-link review summaries", () => {
@@ -901,5 +931,44 @@ describe("client workflows", () => {
       "Army of Me",
       "Roads"
     ]);
+  });
+});
+
+describe("errorMessageForWorkflow", () => {
+  it("stops on a native AbortError", () => {
+    expect(errorMessageForWorkflow(new DOMException("Request interrupted.", "AbortError"), "Request failed.")).toBe("Stopped.");
+  });
+
+  it("stops on a DesktopCommandError with a cancelled code", () => {
+    expect(errorMessageForWorkflow(new DesktopCommandError("cancelled", "Request interrupted."), "Request failed.")).toBe("Stopped.");
+  });
+
+  it("gives setup guidance for an llm_unconfigured DesktopCommandError", () => {
+    const message = errorMessageForWorkflow(new DesktopCommandError("llm_unconfigured", "GEMINI_API_KEY is not set."), "Request failed.");
+    expect(message).toContain("LLM setup is incomplete");
+  });
+
+  it("gives a timeout message for an llm_timeout DesktopCommandError", () => {
+    const message = errorMessageForWorkflow(new DesktopCommandError("llm_timeout", "Request timed out."), "Request failed.");
+    expect(message).toContain("took too long to respond");
+  });
+
+  it("gives a restart message for a spawn_failed DesktopCommandError", () => {
+    const message = errorMessageForWorkflow(new DesktopCommandError("spawn_failed", "Failed to start desktop backend."), "Request failed.");
+    expect(message).toContain("Restart the app");
+  });
+
+  it("falls back to the message-based ladder for an unknown-code DesktopCommandError", () => {
+    const message = errorMessageForWorkflow(new DesktopCommandError("unknown", "fetch failed"), "Request failed.");
+    expect(message).toContain("could not reach the provider");
+  });
+
+  it("still matches the legacy message-based ladder for plain errors", () => {
+    const message = errorMessageForWorkflow(new Error("GEMINI_API_KEY is not set."), "Request failed.");
+    expect(message).toContain("LLM setup is incomplete");
+  });
+
+  it("falls back to the fallback message for an unrecognized plain error", () => {
+    expect(errorMessageForWorkflow(new Error(""), "Request failed.")).toBe("Request failed. Your playlist is unchanged.");
   });
 });

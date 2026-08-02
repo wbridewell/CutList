@@ -69,7 +69,7 @@ If the UI reports that the desktop backend request failed, restart the app. If g
 - There is no localhost listener.
 - The webview talks to the trusted backend only through Tauri commands and progress events.
 - Cloud provider keys must stay in the trusted desktop backend process, not the webview.
-- The current alpha does not yet implement OS keychain settings storage.
+- Cloud provider API keys are stored in the OS keychain (macOS Keychain, via the `keyring` crate), not in a local settings file. Rust injects a stored key into the backend child process env at spawn time; the webview can set or delete a key but never read one back. Settings saved before this existed are migrated into the keychain automatically on first launch.
 
 ## Distribution Status
 
@@ -80,5 +80,4 @@ The intended source-free tester handoff is an unsigned DMG. See [macOS DMG Alpha
 Before sending to non-technical users, finish:
 
 - app icon and bundle polish
-- OS keychain-backed provider settings
 - macOS signing and notarization

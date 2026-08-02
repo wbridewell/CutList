@@ -1,19 +1,22 @@
 import "server-only";
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { z } from "zod";
+import { writeFileAtomicSync } from "@/lib/desktop/atomicFile";
 
 export const LLMProviderSchema = z.enum(["ollama", "openai", "gemini", "none"]);
 export type LLMProvider = z.infer<typeof LLMProviderSchema>;
 export const CuratorPersonaSchema = z.enum(["razor", "archivist", "firestarter"]);
 export type CuratorPersona = z.infer<typeof CuratorPersonaSchema>;
 
+// Provider API keys are not stored here. They live in the OS keychain (see
+// src-tauri/src/secrets.rs) and reach this process only as GEMINI_API_KEY/OPENAI_API_KEY
+// env vars injected by Rust at backend spawn time, the same env vars a genuine shell
+// override would use. llmSetupStatus() below tells the two apart via a marker env var.
 const LocalLLMSettingsSchema = z.object({
   provider: LLMProviderSchema.optional(),
-  geminiApiKey: z.string().optional(),
   geminiModel: z.string().optional(),
-  openaiApiKey: z.string().optional(),
   openaiModel: z.string().optional(),
   ollamaBaseUrl: z.string().optional(),
   ollamaModel: z.string().optional(),
@@ -44,7 +47,7 @@ export type LLMSetupStatus = {
   configured: boolean;
   keyPresent: boolean;
   llmAssistedMatchReviewEnabled: boolean;
-  keySource: "env" | "local" | "not_required" | "missing";
+  keySource: "env" | "keychain" | "not_required" | "missing";
   envOverrides: {
     provider: boolean;
     key: boolean;
@@ -116,20 +119,16 @@ export function readLocalLLMSettings(): LocalLLMSettings {
 
 export function writeLocalLLMSettings(settings: LocalLLMSettings): void {
   const normalized = LocalLLMSettingsSchema.parse(settings);
-  mkdirSync(dirname(settingsPath()), { recursive: true });
-  writeFileSync(settingsPath(), `${JSON.stringify(normalized, null, 2)}\n`, {
-    encoding: "utf8",
-    mode: 0o600
-  });
+  writeFileAtomicSync(settingsPath(), `${JSON.stringify(normalized, null, 2)}\n`);
 }
 
 export function resolveLLMConfig(env: NodeJS.ProcessEnv = process.env): EffectiveLLMConfig {
   const local = readLocalLLMSettings();
   return {
     provider: normalizeProvider(env.LLM_PROVIDER) ?? local.provider ?? defaultConfig.provider,
-    geminiApiKey: nonEmpty(env.GEMINI_API_KEY) ?? nonEmpty(local.geminiApiKey),
+    geminiApiKey: nonEmpty(env.GEMINI_API_KEY),
     geminiModel: nonEmpty(env.GEMINI_MODEL) ?? nonEmpty(local.geminiModel) ?? defaultConfig.geminiModel,
-    openaiApiKey: nonEmpty(env.OPENAI_API_KEY) ?? nonEmpty(local.openaiApiKey),
+    openaiApiKey: nonEmpty(env.OPENAI_API_KEY),
     openaiModel: nonEmpty(env.OPENAI_MODEL) ?? nonEmpty(local.openaiModel) ?? defaultConfig.openaiModel,
     ollamaBaseUrl: (nonEmpty(env.OLLAMA_BASE_URL) ?? nonEmpty(local.ollamaBaseUrl) ?? defaultConfig.ollamaBaseUrl).replace(/\/+$/, ""),
     ollamaModel: nonEmpty(env.OLLAMA_MODEL) ?? nonEmpty(local.ollamaModel) ?? defaultConfig.ollamaModel,
@@ -151,6 +150,14 @@ export function llmModelForProvider(config: EffectiveLLMConfig): string {
   return "none";
 }
 
+// Rust sets this marker alongside GEMINI_API_KEY/OPENAI_API_KEY when it injected the
+// value from the keychain, so a keychain-sourced key isn't mistaken for a real shell
+// env override (which would otherwise look identical: same env var, just present).
+function keychainMarkerPresent(provider: "gemini" | "openai", env: NodeJS.ProcessEnv): boolean {
+  const marker = provider === "gemini" ? env.CUTLIST_GEMINI_KEY_SOURCE : env.CUTLIST_OPENAI_KEY_SOURCE;
+  return nonEmpty(marker) != null;
+}
+
 export function llmSetupStatus(env: NodeJS.ProcessEnv = process.env): LLMSetupStatus {
   const local = readLocalLLMSettings();
   const config = resolveLLMConfig(env);
@@ -159,15 +166,23 @@ export function llmSetupStatus(env: NodeJS.ProcessEnv = process.env): LLMSetupSt
     : config.provider === "openai"
       ? Boolean(config.openaiApiKey)
       : config.provider === "ollama" || config.provider === "none";
+  const geminiFromKeychain = keychainMarkerPresent("gemini", env);
+  const openaiFromKeychain = keychainMarkerPresent("openai", env);
   const keySource = config.provider === "ollama" || config.provider === "none"
     ? "not_required"
-    : config.provider === "gemini" && nonEmpty(env.GEMINI_API_KEY)
-      ? "env"
-      : config.provider === "openai" && nonEmpty(env.OPENAI_API_KEY)
-        ? "env"
-        : keyPresent
-          ? "local"
-          : "missing";
+    : config.provider === "gemini"
+      ? geminiFromKeychain
+        ? "keychain"
+        : nonEmpty(env.GEMINI_API_KEY)
+          ? "env"
+          : "missing"
+      : config.provider === "openai"
+        ? openaiFromKeychain
+          ? "keychain"
+          : nonEmpty(env.OPENAI_API_KEY)
+            ? "env"
+            : "missing"
+        : "missing";
 
   return {
     provider: config.provider,
@@ -181,9 +196,9 @@ export function llmSetupStatus(env: NodeJS.ProcessEnv = process.env): LLMSetupSt
     envOverrides: {
       provider: nonEmpty(env.LLM_PROVIDER) != null,
       key: config.provider === "gemini"
-        ? nonEmpty(env.GEMINI_API_KEY) != null
+        ? !geminiFromKeychain && nonEmpty(env.GEMINI_API_KEY) != null
         : config.provider === "openai"
-          ? nonEmpty(env.OPENAI_API_KEY) != null
+          ? !openaiFromKeychain && nonEmpty(env.OPENAI_API_KEY) != null
           : false,
       model: config.provider === "gemini"
         ? nonEmpty(env.GEMINI_MODEL) != null

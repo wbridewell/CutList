@@ -1,6 +1,6 @@
 [package]
 name = "cutlist"
-version = "0.1.5"
+version = "0.1.6"
 description = "The CutList desktop alpha"
 authors = ["Will Bridewell"]
 edition = "2021"
@@ -9,6 +9,8 @@ edition = "2021"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+keyring = "3"
+regex = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "2", features = [] }

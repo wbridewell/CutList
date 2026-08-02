@@ -727,7 +727,7 @@ describe("UI redesign behavior", () => {
     expect(html).toContain("Gemini (recommended)");
     expect(html).toContain("gemini-2.5-flash");
     expect(html).toContain("Save and test");
-    expect(html).toContain("API keys are saved only on this machine");
+    expect(html).toContain("API keys are stored in your system keychain");
     expect(html).not.toContain("LLM_PROVIDER=gemini");
   });
 

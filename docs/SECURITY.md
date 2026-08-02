@@ -26,7 +26,7 @@ React escapes rendered strings by default. Do not introduce raw HTML rendering f
 
 ## Secret Handling
 
-OpenAI, Gemini, and other provider keys must stay in native settings storage, the shell environment, or `.env.local` for development. Never expose them with public client prefixes.
+OpenAI and Gemini keys are stored in the OS keychain (`src-tauri/src/secrets.rs`), the shell environment, or `.env.local` for development; they are never written to the local settings JSON file. Rust injects a keychain-stored key into the trusted backend process env at spawn time and never returns one to the webview. Never expose provider keys with public client prefixes.
 
 ## Logging
 

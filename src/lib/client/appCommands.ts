@@ -17,6 +17,7 @@ export const appCommandIds = {
   toggleSidebar: "view.toggleSidebar",
   toggleDevTools: "view.toggleDevTools",
   showHelp: "help.showHelp",
+  showLogs: "help.showLogs",
   reportIssue: "help.reportIssue"
 } as const;
 
@@ -83,6 +84,15 @@ export function labelForCommand(commandId: AppCommandId): string {
       return "Save Workspace As...";
     case appCommandIds.showHelp:
       return "CutList Help";
+    case appCommandIds.showLogs:
+      switch (currentPlatform()) {
+        case "macos":
+          return "Show Logs in Finder";
+        case "windows":
+          return "Show Logs in File Explorer";
+        default:
+          return "Show Logs in Files";
+      }
     case appCommandIds.reportIssue:
       return "Report Issue";
     case appCommandIds.toggleDevTools:

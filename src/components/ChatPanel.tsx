@@ -28,7 +28,7 @@ import {
   runSeedVerificationWorkflow,
   type ClientWorkflowResult
 } from "@/lib/client/workflows";
-import { planPlaylistRequest } from "@/lib/client/playlistApi";
+import { planPlaylistRequest } from "@/lib/client/desktopPlaylistBridge";
 import { emitReviewRoutingTrace } from "@/lib/debug/reviewRouting";
 import {
   createCuratorUndoHistoryEntry,

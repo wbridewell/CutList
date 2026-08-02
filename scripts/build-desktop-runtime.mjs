@@ -19,6 +19,8 @@ import ts from "typescript";
 const require = createRequire(import.meta.url);
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const root = resolve(scriptDir, "..");
+// Convenience default for this maintainer's machine only. Any other machine building a
+// release DMG needs CUTLIST_NODE_RUNTIME_PATH set explicitly; see the error below.
 const defaultPortableNode = join(process.env.HOME ?? "", ".cache", "codex-runtimes", "codex-primary-runtime", "dependencies", "node", "bin", "node");
 const runtimeDir = join(root, ".desktop-runtime");
 const compiledRoot = join(runtimeDir, "app");
@@ -292,7 +294,9 @@ export function resolveRuntimeNodeSourcePath(env = process.env, execPath = proce
 
   if (isReleasePackaging(env)) {
     throw new Error(
-      "Release desktop packaging needs a portable macOS Node binary. Set CUTLIST_NODE_RUNTIME_PATH because the bundled default was not found."
+      "Release desktop packaging needs a portable macOS Node binary, and the maintainer's local default was not found on this machine. " +
+      "Download a macOS Node tarball from https://nodejs.org/en/download (the \"Prebuilt binaries\" .tar.gz, not the installer), extract it, " +
+      "and set CUTLIST_NODE_RUNTIME_PATH to the extracted <dir>/bin/node executable."
     );
   }
 

@@ -130,7 +130,7 @@ npm test
 
 - LLM and provider calls stay in the trusted desktop backend.
 - Desktop command payloads are schema-validated.
-- API/provider keys are stored locally on the machine, not in UI state.
+- API/provider keys are stored in the OS keychain, not in UI state or a settings file.
 - Native app-data drafts and sessions are convenience storage, not secure secrets storage.
 
 Report vulnerabilities privately. See [SECURITY.md](SECURITY.md).
@@ -152,7 +152,6 @@ Report vulnerabilities privately. See [SECURITY.md](SECURITY.md).
 
 - No authentication or authorization.
 - No server-side database.
-- No OS keychain integration yet.
 - No streaming-service upload.
 - Provider metadata can still be ambiguous.
 

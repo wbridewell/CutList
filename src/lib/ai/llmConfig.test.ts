@@ -24,6 +24,8 @@ describe("LLM config resolution", () => {
     vi.stubEnv("OLLAMA_MODEL", "");
     vi.stubEnv("OLLAMA_BASE_URL", "");
     vi.stubEnv("LLM_TIMEOUT_MS", "");
+    vi.stubEnv("CUTLIST_GEMINI_KEY_SOURCE", "");
+    vi.stubEnv("CUTLIST_OPENAI_KEY_SOURCE", "");
   });
 
   afterEach(() => {
@@ -47,10 +49,9 @@ describe("LLM config resolution", () => {
     });
   });
 
-  it("uses local settings when env vars are absent", () => {
+  it("uses local settings for non-secret fields when env vars are absent", () => {
     writeLocalLLMSettings({
       provider: "gemini",
-      geminiApiKey: "local-gemini-key",
       geminiModel: "gemini-2.5-flash-lite",
       timeoutMs: 180000,
       llmAssistedMatchReviewEnabled: false,
@@ -60,25 +61,35 @@ describe("LLM config resolution", () => {
     const config = resolveLLMConfig();
 
     expect(config.provider).toBe("gemini");
-    expect(config.geminiApiKey).toBe("local-gemini-key");
     expect(config.geminiModel).toBe("gemini-2.5-flash-lite");
     expect(config.timeoutMs).toBe(180000);
     expect(llmSetupStatus()).toMatchObject({
-      configured: true,
-      keyPresent: true,
-      keySource: "local",
+      configured: false,
+      keyPresent: false,
+      keySource: "missing",
       llmAssistedMatchReviewEnabled: false,
       curatorPersona: "firestarter"
     });
   });
 
-  it("lets environment variables override local settings", () => {
-    writeLocalLLMSettings({
-      provider: "gemini",
-      geminiApiKey: "local-gemini-key",
-      geminiModel: "gemini-2.5-flash-lite",
-      timeoutMs: 180000
+  it("reports keySource as keychain when Rust injected the key from the keychain", () => {
+    vi.stubEnv("GEMINI_API_KEY", "keychain-gemini-key");
+    vi.stubEnv("CUTLIST_GEMINI_KEY_SOURCE", "1");
+
+    const config = resolveLLMConfig();
+
+    expect(config.geminiApiKey).toBe("keychain-gemini-key");
+    expect(llmSetupStatus()).toMatchObject({
+      configured: true,
+      keyPresent: true,
+      keySource: "keychain",
+      envOverrides: {
+        key: false
+      }
     });
+  });
+
+  it("lets a genuine environment variable override take priority and reports keySource as env", () => {
     vi.stubEnv("LLM_PROVIDER", "openai");
     vi.stubEnv("OPENAI_API_KEY", "env-openai-key");
     vi.stubEnv("OPENAI_MODEL", "gpt-test");
@@ -102,15 +113,12 @@ describe("LLM config resolution", () => {
     });
   });
 
-  it("merges local settings without returning raw keys in status", () => {
-    mergeLocalLLMSettings({
-      provider: "openai",
-      openaiApiKey: "secret-key",
-      openaiModel: "gpt-4.1-mini",
-      curatorPersona: "archivist"
-    });
+  it("never echoes the resolved key back in status", () => {
+    vi.stubEnv("OPENAI_API_KEY", "secret-key");
+    vi.stubEnv("CUTLIST_OPENAI_KEY_SOURCE", "1");
+    mergeLocalLLMSettings({ provider: "openai", curatorPersona: "archivist" });
 
-    expect(readLocalLLMSettings()).toMatchObject({ openaiApiKey: "secret-key", curatorPersona: "archivist" });
+    expect(readLocalLLMSettings()).not.toHaveProperty("openaiApiKey");
     expect(JSON.stringify(llmSetupStatus())).not.toContain("secret-key");
     expect(llmSetupStatus().curatorPersona).toBe("archivist");
   });

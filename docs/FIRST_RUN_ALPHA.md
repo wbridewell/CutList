@@ -78,5 +78,5 @@ Your Gemini setup should still be saved locally, so you should not need to paste
 
 - This is a local-only prototype.
 - Provider verification can reject real tracks when metadata is ambiguous.
-- LLM provider keys are local settings, not OS keychain entries yet.
+- LLM provider keys are stored as OS keychain entries, not in a local settings file.
 - A polished Tauri DMG, signed build, and proper desktop settings screen are future packaging work.

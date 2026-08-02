@@ -6,11 +6,12 @@ import {
   desktopPlanUserRequest,
   desktopVerifyTracks,
   getDesktopLlmSetup,
-  getDesktopWorkspaceState,
   saveDesktopLlmSetup,
   saveDesktopWorkspaceState,
   testDesktopLlmSetup
 } from "@/lib/desktop/backend";
+import type { DesktopError } from "@/lib/desktop/contracts";
+import { classifyBackendError } from "@/lib/desktop/errors";
 import { timeAsync } from "@/lib/debugTiming";
 
 type CommandEnvelope = {
@@ -30,7 +31,7 @@ type ResultLine = {
 
 type ErrorLine = {
   type: "error";
-  error: string;
+  error: DesktopError;
 };
 
 function writeLine(line: ProgressLine | ResultLine | ErrorLine): void {
@@ -70,9 +71,6 @@ async function main(): Promise<void> {
         return;
       case "testLlmSetup":
         writeLine({ type: "result", data: await timed(() => testDesktopLlmSetup(envelope.payload as never)) });
-        return;
-      case "getWorkspaceState":
-        writeLine({ type: "result", data: await timed(() => getDesktopWorkspaceState()) });
         return;
       case "saveWorkspaceState":
         writeLine({
@@ -117,7 +115,7 @@ async function main(): Promise<void> {
 main().catch((error) => {
   writeLine({
     type: "error",
-    error: error instanceof Error ? error.message : "Unknown desktop command failure."
+    error: classifyBackendError(error)
   });
   process.exitCode = 1;
 });

@@ -119,10 +119,10 @@ function retryUserMessage(
     "",
     `Retry instruction: propose at least ${remainingCount} additional real tracks that satisfy the existing playlist constraints.`,
     "Do not repeat tracks already in the playlist, already accepted, or previously rejected in this request.",
-    "Prefer canonical, widely released studio tracks by the requested artist and closely related artists.",
+    "Prefer the primary studio release of a track by the requested artist and closely related artists over live versions, remasters, alternate mixes, covers, or soundtrack outliers, unless the user explicitly asks for one of those.",
+    "This is about picking the standard release of a track, not a preference for famous songs over lesser-known ones; a real, lesser-known track is fine as long as it is not a joke guess or an invented title.",
     "Use only known released recordings that should appear in iTunes, Apple Music, MusicBrainz, Spotify, or similar catalogs.",
     "If the request is vibe-based, map the vibe to real catalog tracks instead of inventing atmospheric artist/title pairs.",
-    "Avoid live versions, remasters, alternate mixes, covers, soundtrack outliers, joke guesses, and obscure deep cuts unless the user explicitly asks for them.",
     suppressedCount > 0 ? `Avoid ${suppressedCount} artist/title pair${suppressedCount === 1 ? "" : "s"} that were already rejected as non-credible earlier in this session.` : null,
     rejectionSummaryForRetry(rejectedCandidates),
     blocked ? `Avoid these artist/title pairs: ${blocked}` : null

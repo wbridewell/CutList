@@ -212,6 +212,43 @@ export function materializeLocalSessionSnapshot(input: SessionInput): LocalSessi
   };
 }
 
+export type WorkspaceStateValidation =
+  | { status: "ok"; state: PersistedWorkspaceStateV1 }
+  | { status: "invalid" };
+
+export function validatePersistedWorkspaceStateValue(value: unknown): WorkspaceStateValidation {
+  const result = PersistedWorkspaceStateSchema.safeParse(value);
+  if (!result.success) {
+    return { status: "invalid" };
+  }
+
+  return {
+    status: "ok",
+    state: {
+      version: PERSISTED_WORKSPACE_STATE_VERSION,
+      draft: result.data.draft ? {
+        version: LOCAL_DRAFT_VERSION,
+        playlist: result.data.draft.playlist,
+        messages: validMessages(result.data.draft.messages),
+        history: validHistory(result.data.draft.history),
+        curatorPersona: result.data.draft.curatorPersona,
+        savedAt: result.data.draft.savedAt
+      } : null,
+      sessions: result.data.sessions.map((session) => ({
+        version: LOCAL_DRAFT_VERSION,
+        id: session.id,
+        name: session.name,
+        playlist: session.playlist,
+        messages: validMessages(session.messages),
+        history: validHistory(session.history),
+        curatorPersona: session.curatorPersona,
+        savedAt: session.savedAt
+      })),
+      activeSessionId: result.data.activeSessionId
+    }
+  };
+}
+
 export function parsePersistedWorkspaceState(raw: string | null): PersistedWorkspaceStateV1 | null {
   if (!raw) {
     return null;
@@ -224,33 +261,8 @@ export function parsePersistedWorkspaceState(raw: string | null): PersistedWorks
     return null;
   }
 
-  const result = PersistedWorkspaceStateSchema.safeParse(parsed);
-  if (!result.success) {
-    return null;
-  }
-
-  return {
-    version: PERSISTED_WORKSPACE_STATE_VERSION,
-    draft: result.data.draft ? {
-      version: LOCAL_DRAFT_VERSION,
-      playlist: result.data.draft.playlist,
-      messages: validMessages(result.data.draft.messages),
-      history: validHistory(result.data.draft.history),
-      curatorPersona: result.data.draft.curatorPersona,
-      savedAt: result.data.draft.savedAt
-    } : null,
-    sessions: result.data.sessions.map((session) => ({
-      version: LOCAL_DRAFT_VERSION,
-      id: session.id,
-      name: session.name,
-      playlist: session.playlist,
-      messages: validMessages(session.messages),
-      history: validHistory(session.history),
-      curatorPersona: session.curatorPersona,
-      savedAt: session.savedAt
-    })),
-    activeSessionId: result.data.activeSessionId
-  };
+  const validated = validatePersistedWorkspaceStateValue(parsed);
+  return validated.status === "ok" ? validated.state : null;
 }
 
 export function serializePersistedWorkspaceState(input: PersistedWorkspaceStateV1): string {

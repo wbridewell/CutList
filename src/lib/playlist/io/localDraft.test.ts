@@ -8,6 +8,7 @@ import {
   parseLocalDraft,
   serializePersistedWorkspaceState,
   serializeLocalDraft,
+  validatePersistedWorkspaceStateValue,
   type ChatMessage,
   type RequestHistoryEntry
 } from "@/lib/playlist/io/localDraft";
@@ -208,6 +209,32 @@ describe("persisted workspace state", () => {
 
   it("fails safe on malformed workspace state", () => {
     expect(parsePersistedWorkspaceState("{bad json")).toBeNull();
+  });
+});
+
+describe("validatePersistedWorkspaceStateValue", () => {
+  it("accepts a value that matches the workspace schema", () => {
+    const result = validatePersistedWorkspaceStateValue({
+      version: 1,
+      draft: {
+        version: 1,
+        playlist,
+        messages,
+        history: [],
+        savedAt: "2026-05-27T00:00:08Z"
+      },
+      sessions: [],
+      activeSessionId: null
+    });
+
+    expect(result.status).toBe("ok");
+    expect(result.status === "ok" ? result.state.draft?.playlist.id : null).toBe("test");
+  });
+
+  it("rejects JSON-valid values that do not match the schema", () => {
+    expect(validatePersistedWorkspaceStateValue({ unrelated: true })).toEqual({ status: "invalid" });
+    expect(validatePersistedWorkspaceStateValue("just a string")).toEqual({ status: "invalid" });
+    expect(validatePersistedWorkspaceStateValue(null)).toEqual({ status: "invalid" });
   });
 });
 
