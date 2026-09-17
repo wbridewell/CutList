@@ -124,7 +124,7 @@ function uniqueMatches(matches: AttemptedMatch[]): AttemptedMatch[] {
   return deduped;
 }
 
-export function llmAssistedMatchReviewEnabled(): boolean {
+function llmAssistedMatchReviewEnabled(): boolean {
   return readLocalLLMSettings().llmAssistedMatchReviewEnabled ?? true;
 }
 

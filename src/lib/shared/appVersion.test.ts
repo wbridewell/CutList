@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { appVersion, metadataUserAgent } from "@/lib/appVersion";
+import { appVersion, metadataUserAgent } from "@/lib/shared/appVersion";
 
 describe("appVersion", () => {
   it("uses the version the desktop shell injects", () => {

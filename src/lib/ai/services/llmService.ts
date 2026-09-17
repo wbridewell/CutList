@@ -1,5 +1,5 @@
 import { getLlmContract } from "@/lib/ai/contracts";
-import { timeAsync } from "@/lib/debugTiming";
+import { timeAsync } from "@/lib/debug/timing";
 import { isJsonExtractionError, isLLMDisabledError, isLLMTimeoutError, isOpenAIQuotaError } from "@/lib/ai/errors";
 import { getJsonFromLLM } from "@/lib/ai/llmClient";
 import { isModelShapeError, summarizeModelError } from "@/lib/ai/modelErrors";

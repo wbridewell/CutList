@@ -7,7 +7,7 @@ function debugFlagFromEnv(): string | undefined {
   return process.env.NEXT_PUBLIC_CUTLIST_DEBUG_REVIEW_ROUTING ?? process.env.CUTLIST_DEBUG_REVIEW_ROUTING;
 }
 
-export function reviewRoutingDebugEnabled(): boolean {
+function reviewRoutingDebugEnabled(): boolean {
   const envFlag = debugFlagFromEnv();
   if (envFlag === "1") {
     return true;

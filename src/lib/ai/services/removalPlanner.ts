@@ -1,6 +1,6 @@
 import { playlistRemovalPrompt } from "@/lib/ai/prompts";
 import { attemptLlmContract } from "@/lib/ai/services/llmService";
-import { normalizeText } from "@/lib/music/normalize";
+import { normalizeText } from "@/lib/shared/normalize";
 import { deterministicAnalyzePlaylist } from "@/lib/playlist/analysis/deterministicAnalyze";
 import { evaluatePlaylistConstraints } from "@/lib/playlist/constraints";
 import type { CuratorRunOptions } from "@/lib/ai/curatorTypes";

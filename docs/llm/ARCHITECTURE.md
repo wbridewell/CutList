@@ -10,7 +10,9 @@ Frontend components call desktop-aware client helpers in `src/lib/client`. Nativ
 
 ## Data Flow
 
-User input -> client desktop helper -> Tauri command -> Zod validation -> LLM/provider/domain service -> Zod response validation -> React state update -> native app-data save.
+User input -> plan preview command (`desktop_plan_user_request`) -> client routing by route family -> message, analyze, or import command -> Zod validation -> planning, verification, and constraint services -> Zod response validation -> React state update -> native app-data save.
+
+The plan preview and the message command share one operator plan: the preview returns it with a fingerprint, and the message command reuses it while the fingerprint matches. [REQUEST_PIPELINE.md](REQUEST_PIPELINE.md) walks through every stage.
 
 ## State Management
 
@@ -35,6 +37,10 @@ Ollama, OpenAI, Gemini, iTunes Search API, and MusicBrainz are the current exter
 ## Build and Deployment
 
 Next.js builds the static frontend used by the desktop app. macOS release packaging is a separate `build:dmg` path that bundles the desktop runtime.
+
+## Import Boundaries
+
+Layers depend downward only: `app -> components -> hooks -> client -> desktop -> ai -> music -> playlist -> types`, with `src/lib/shared` and `src/lib/debug` reachable from every layer. `eslint.config.mjs` enforces this per directory; `AGENTS.md` lists the exceptions.
 
 ## Tradeoffs
 

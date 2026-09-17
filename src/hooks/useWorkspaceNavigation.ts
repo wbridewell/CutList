@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { UtilitySection } from "@/components/chat/CommandDrawer";
+// The drawer sections the workspace can jump to. Defined here, not in the component, so the
+// hook layer never depends on the component layer.
+export type UtilitySection = "session" | "issues" | "inputs" | "history";
 
 export type MobileWorkspaceView = "playlist" | "ask" | "history";
 

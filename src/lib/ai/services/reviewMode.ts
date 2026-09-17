@@ -1,8 +1,7 @@
 import { parseCompressionRequest } from "@/lib/playlist/analysis/compression";
-import type { CuratorRunOptions } from "@/lib/ai/curatorTypes";
-import { parseInstructionIntentDetailed } from "@/lib/ai/services/instructionIntent";
+
 import { hasNonModificationDirective, hasSequencingReviewCue } from "@/lib/playlist/requestLexing";
-import type { PlaylistState, ReviewMode } from "@/types/playlist";
+import type { ReviewMode } from "@/types/playlist";
 
 function hasFocusedTransitionRepairSignals(userMessage: string): boolean {
   return /\brepair\b.{0,80}\btransition\b.{0,80}\bfrom\b.{0,120}\binto\b/i.test(userMessage) ||
@@ -62,31 +61,3 @@ export function determineReviewModeDeterministically(userMessage: string): Revie
   return "full_critique";
 }
 
-export function selectReviewMode(
-  userMessage: string,
-  llmReviewMode: ReviewMode | null | undefined
-): {
-  reviewMode: ReviewMode;
-  source: "deterministic" | "llm" | "fallback";
-} {
-  const deterministic = determineReviewModeDeterministically(userMessage);
-  if (deterministic !== "full_critique") {
-    return { reviewMode: deterministic, source: "deterministic" };
-  }
-  if (llmReviewMode) {
-    return { reviewMode: llmReviewMode, source: "llm" };
-  }
-  return { reviewMode: "full_critique", source: "fallback" };
-}
-
-export async function resolveReviewMode(
-  playlist: PlaylistState,
-  userMessage: string,
-  options: CuratorRunOptions = {}
-): Promise<{
-  reviewMode: ReviewMode;
-  source: "deterministic" | "llm" | "fallback";
-}> {
-  const intentResult = await parseInstructionIntentDetailed(playlist, userMessage, options);
-  return selectReviewMode(userMessage, intentResult.intent?.routingIntent.reviewMode);
-}

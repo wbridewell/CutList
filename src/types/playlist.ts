@@ -31,6 +31,7 @@ import {
   PlaylistStateSchema,
   PlaylistUpdateActionSchema,
   PlaylistUpdateSchema,
+  PrecomputedOperatorPlanSchema,
   PlaylistTrackRoleSchema,
   NormalizedInstructionIntentSchema,
   OperatorBoundEntitiesSchema,
@@ -140,3 +141,4 @@ export type OperatorBoundEntities = z.infer<typeof OperatorBoundEntitiesSchema>;
 export type ResolvedOperatorPlan = z.infer<typeof ResolvedOperatorPlanSchema>;
 export type OperatorExecutionReceipt = z.infer<typeof OperatorExecutionReceiptSchema>;
 export type ResolvedUserRequestPlan = z.infer<typeof ResolvedUserRequestPlanSchema>;
+export type PrecomputedOperatorPlan = z.infer<typeof PrecomputedOperatorPlanSchema>;

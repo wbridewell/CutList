@@ -1,4 +1,4 @@
-import { normalizeArtist, normalizeText, normalizeVersionlessText } from "@/lib/music/normalize";
+import { normalizeArtist, normalizeText, normalizeVersionlessText } from "@/lib/shared/normalize";
 import type { Track } from "@/types/playlist";
 
 type VersionCleanupResult = {

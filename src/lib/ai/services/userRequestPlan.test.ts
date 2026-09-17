@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { resolveUserRequestPlan } from "@/lib/ai/services/userRequestPlan";
+import { requestPlanFingerprint } from "@/lib/playlist/requestPlanFingerprint";
 import type { PlaylistState } from "@/types/playlist";
 
 vi.mock("@/lib/ai/llmClient", () => ({
@@ -187,5 +188,25 @@ describe("resolveUserRequestPlan", () => {
     expect(plan.routeFamily).toBe("curator");
     expect(plan.executionPolicy).toBe("mutating");
     expect(plan.operationPlan.kind).toBe("curator_only");
+  });
+});
+
+describe("resolveUserRequestPlan reuse handoff", () => {
+  it("returns the full operator plan and a fingerprint of the inputs it was planned against", async () => {
+    const userMessage = "Review this playlist but don't change anything.";
+
+    const plan = await resolveUserRequestPlan(playlist, userMessage);
+
+    expect(plan.operatorPlan.routeFamily).toBe(plan.routeFamily);
+    expect(plan.operatorPlan.executionPolicy).toBe(plan.executionPolicy);
+    expect(plan.fingerprint).toBe(requestPlanFingerprint({ playlist, userMessage, forceReadOnly: false }));
+  });
+
+  it("fingerprints a forced read-only preview differently from a mutating send of the same text", async () => {
+    const userMessage = "Tighten the middle.";
+
+    const readOnly = await resolveUserRequestPlan(playlist, userMessage, { forceReadOnly: true });
+
+    expect(readOnly.fingerprint).not.toBe(requestPlanFingerprint({ playlist, userMessage, forceReadOnly: false }));
   });
 });

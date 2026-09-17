@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { handleAnalyzePlaylist } from "@/lib/ai/services/analyzeService";
+import { buildPlaylist } from "@/lib/testing/builders";
 import { JsonExtractionError } from "@/lib/ai/jsonResponse";
-import type { PlaylistState, Track } from "@/types/playlist";
+import type { Track } from "@/types/playlist";
 
 vi.mock("@/lib/ai/llmClient", async () => {
   const actual = await vi.importActual<typeof import("@/lib/ai/llmClient")>("@/lib/ai/llmClient");
@@ -37,21 +38,15 @@ function track(overrides: Partial<Track> = {}): Track {
   };
 }
 
-const playlist: PlaylistState = {
+const playlist = buildPlaylist({
   id: "playlist",
-  title: "Test",
-  mood: null,
-  arc: null,
   tracks: [
     track({ id: "open", title: "Open", artist: "A", energy: 2, genreTags: ["dream pop"] }),
     track({ id: "middle", title: "Middle", artist: "B", energy: 4, genreTags: ["dream pop"] }),
     track({ id: "close", title: "Close", artist: "C", energy: 3, genreTags: ["dream pop"] })
   ],
-  constraints: {},
-  discoveryRadius: "moderate",
-  conversationSummary: null,
   updatedAt: "2026-06-13T00:00:00Z"
-};
+});
 
 describe("analyze service compression routing", () => {
   beforeEach(() => {

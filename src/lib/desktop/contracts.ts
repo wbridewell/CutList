@@ -13,7 +13,7 @@ import type {
   VerifyResponse
 } from "@/types/playlist";
 import type { PersistedWorkspaceStateV1 } from "@/lib/playlist/io/localDraft";
-import type { CuratorPersona, KeychainProvider, LLMProvider } from "@/lib/desktop/settingsSchemas";
+import type { CuratorPersona, KeychainProvider, LLMProvider } from "@/lib/shared/settingsSchemas";
 
 // Reported by desktop commands that spawn the Node backend (see classifyBackendError in
 // src/lib/desktop/errors.ts, which is where most of these are actually produced).

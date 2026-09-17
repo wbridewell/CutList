@@ -1,5 +1,6 @@
 import { reviewPromptForComposerRequest, splitMixedComposerRequest } from "@/lib/playlist/requestRouting";
 import { resolveOperatorPlan } from "@/lib/ai/services/operatorPlanner";
+import { requestPlanFingerprint } from "@/lib/playlist/requestPlanFingerprint";
 import type { CuratorRunOptions } from "@/lib/ai/curatorTypes";
 import type { PlaylistState, ResolvedOperatorPlan, ResolvedUserRequestPlan } from "@/types/playlist";
 
@@ -38,7 +39,11 @@ function operationPlanKindFromOperatorPlan(plan: ResolvedOperatorPlan): Resolved
   return "curator_only";
 }
 
-function adaptOperatorPlan(plan: ResolvedOperatorPlan, userMessage: string): ResolvedUserRequestPlan {
+// The client-facing summary. resolveUserRequestPlan adds the plan itself and its fingerprint.
+function adaptOperatorPlan(
+  plan: ResolvedOperatorPlan,
+  userMessage: string
+): Omit<ResolvedUserRequestPlan, "operatorPlan" | "fingerprint"> {
   const reviewPrompt = reviewPromptForComposerRequest(userMessage);
   const mixedPromptParts = splitMixedComposerRequest(userMessage);
   const isMixedCompatibilityCase = plan.routeFamily === "curator" &&
@@ -91,5 +96,15 @@ export async function resolveUserRequestPlan(
   userMessage: string,
   options: CuratorRunOptions & { forceReadOnly?: boolean } = {}
 ): Promise<ResolvedUserRequestPlan> {
-  return adaptOperatorPlan(await resolveOperatorPlan(playlist, userMessage, options), userMessage);
+  const operatorPlan = await resolveOperatorPlan(playlist, userMessage, options);
+  return {
+    ...adaptOperatorPlan(operatorPlan, userMessage),
+    operatorPlan,
+    fingerprint: requestPlanFingerprint({
+      playlist,
+      userMessage,
+      conversationContext: options.conversationContext,
+      forceReadOnly: options.forceReadOnly ?? false
+    })
+  };
 }

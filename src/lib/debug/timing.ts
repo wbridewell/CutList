@@ -1,6 +1,6 @@
 type TimingFieldValue = boolean | number | string | undefined;
 
-export function debugTimingEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+function debugTimingEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   return env.CUTLIST_DEBUG_TIMING === "1";
 }
 

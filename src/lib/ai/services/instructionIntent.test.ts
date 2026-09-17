@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { parseInstructionIntentDetailed } from "@/lib/ai/services/instructionIntent";
-import type { PlaylistState } from "@/types/playlist";
+import { buildPlaylist } from "@/lib/testing/builders";
 
 vi.mock("@/lib/ai/llmClient", () => ({
   getLLMProvider: vi.fn(() => "gemini")
@@ -12,17 +12,7 @@ vi.mock("@/lib/ai/services/llmService", () => ({
 
 const { attemptLlmContract } = await import("@/lib/ai/services/llmService");
 
-const playlist: PlaylistState = {
-  id: "playlist-1",
-  title: "Test",
-  mood: null,
-  arc: null,
-  tracks: [],
-  constraints: {},
-  discoveryRadius: "moderate",
-  conversationSummary: null,
-  updatedAt: "2026-06-18T00:00:00Z"
-};
+const playlist = buildPlaylist({ updatedAt: "2026-06-18T00:00:00Z" });
 
 describe("parseInstructionIntentDetailed", () => {
   it("preserves repaired-success parse status for downstream routing", async () => {

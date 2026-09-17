@@ -1,4 +1,4 @@
-import { normalizeText } from "@/lib/music/normalize";
+import { normalizeText } from "@/lib/shared/normalize";
 import { formatRuntime } from "@/lib/playlist/runtime";
 import type { ConstraintFinding, EvidenceFieldKey, PlaylistConstraints, Track } from "@/types/playlist";
 
@@ -28,7 +28,7 @@ export type ConstraintRuleChip = {
   ruleId: string;
 };
 
-export const constraintFieldMergeStrategies: Partial<Record<keyof PlaylistConstraints, ConstraintMergeStrategy>> = {
+const constraintFieldMergeStrategies: Partial<Record<keyof PlaylistConstraints, ConstraintMergeStrategy>> = {
   allowExplicit: "replace",
   artistLimits: "minLimit",
   energyTrajectory: "replace",
@@ -692,7 +692,7 @@ function fieldIsActive(value: PlaylistConstraints[keyof PlaylistConstraints]): b
   return true;
 }
 
-export function isConstraintRuleActive(rule: ConstraintRuleDefinition, constraints: PlaylistConstraints): boolean {
+function isConstraintRuleActive(rule: ConstraintRuleDefinition, constraints: PlaylistConstraints): boolean {
   return rule.fields.some((field) => fieldIsActive(constraints[field]));
 }
 

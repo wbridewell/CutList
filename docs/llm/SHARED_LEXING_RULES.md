@@ -14,6 +14,8 @@ Use it for low-level request detection such as:
 - non-modification directives
 - placement phrases like `after X`, `before X`, and `at the beginning`
 - replacement metadata like canonical-version and requested album cues
+- strict reorder-only requests that forbid adding or removing
+- unsupported catalog questions such as an album's tracklist or an artist's songs
 - ordered clause splitting for mixed prompts
 
 Do not re-implement these regex families in other parser layers unless there is a very strong reason and the behavior is kept in lockstep.

@@ -15,6 +15,7 @@ The CutList is a local-first Tauri desktop app with a Next.js TypeScript UI for 
 - React 19 renders the desktop webview UI.
 - TypeScript 5.8 is used across the app, trusted desktop backend logic, and tests.
 - Path imports use the `@` alias for `src`.
+- Layers depend one way (`app -> components -> hooks -> client -> desktop -> ai -> music -> playlist -> types`, plus `shared` and `debug` from anywhere), enforced by ESLint. See `AGENTS.md`.
 
 Primary framework entry points:
 

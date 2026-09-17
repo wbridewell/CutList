@@ -36,6 +36,15 @@ npm run build:dmg
 
 The normal desktop flow uses the in-app `LLM setup` dialog and stores settings in native app-data files. Environment variables still work as development/debug overrides.
 
+## Rust Shell Layout
+
+- `src-tauri/src/main.rs`: module declarations and the handler registration only.
+- `runtime.rs`: the development runner (`node` + `tsx` from source), the packaged runtime validation, `.env.local` loading in debug builds, and keychain secret injection into the backend child.
+- `backend.rs`: spawns the Node backend for one command, forwards progress events, collects the result or error, and handles cancellation. Commands that simply forward a payload are declared here.
+- `commands/export.rs`, `keychain.rs`, `workspace.rs`, `shell.rs`: the native-only commands.
+- `error.rs`: the `{code, message}` error every command returns; `secrets.rs`: keyring access; `desktop_log.rs`: the redacted app-data log.
+- Each module carries its own unit tests; `test_support.rs` holds the shared temp-directory helpers.
+
 ## Native Menu And Command Layer
 
 - Desktop-only menu setup lives in `src/lib/client/desktopMenu.ts` and is installed only when the app is running inside Tauri.

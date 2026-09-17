@@ -46,7 +46,7 @@ import {
 } from "@/lib/playlist/operations";
 import { parseDiscoveryRadiusOverride } from "@/lib/playlist/discoveryRadius";
 import { nowIso, touchPlaylist, updatePlaylistDiscoveryRadius } from "@/lib/playlist/state";
-import type { AnalyzePlaylistResponse, AttemptedMatch, PlaylistState, ReviewSuggestion } from "@/types/playlist";
+import type { AnalyzePlaylistResponse, AttemptedMatch, PlaylistState, PrecomputedOperatorPlan, ReviewSuggestion } from "@/types/playlist";
 
 export { createCompletedRequestMessages, createRequestMessageList } from "@/lib/client/workflows";
 
@@ -462,7 +462,7 @@ export function ChatPanel({
   async function submitCuratorRequest(
     outgoing: string,
     startingStatus: string,
-    options: { requestId?: string; reviewSuggestion?: ReviewSuggestion } = {}
+    options: { requestId?: string; reviewSuggestion?: ReviewSuggestion; precomputedPlan?: PrecomputedOperatorPlan } = {}
   ) {
     const requestId = options.requestId ?? reviewRoutingRequestId();
     const requestMessages = createRequestMessageList(messages, outgoing);
@@ -478,7 +478,7 @@ export function ChatPanel({
     setActiveController(controller);
     try {
       const result = await runCuratorRequestWorkflow(
-        { messages, outgoing, playlist: playlistForComposer, requestId },
+        { messages, outgoing, playlist: playlistForComposer, requestId, precomputedPlan: options.precomputedPlan },
         { onProgress: setProgressStatus, signal: controller.signal }
       );
       const nextPlaylist = result.data && options.reviewSuggestion
@@ -648,7 +648,10 @@ export function ChatPanel({
       }
 
       shouldClearUserMessage = true;
-      await submitCuratorRequest(outgoing, "Starting request.", { requestId });
+      await submitCuratorRequest(outgoing, "Starting request.", {
+        requestId,
+        precomputedPlan: { operatorPlan: requestPlan.operatorPlan, fingerprint: requestPlan.fingerprint }
+      });
     } finally {
       setBusy(false);
       if (shouldClearUserMessage) {

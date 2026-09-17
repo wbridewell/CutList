@@ -41,7 +41,3 @@ export function isJsonExtractionError(error: unknown): error is JsonExtractionEr
 export function isOllamaUnavailableError(error: unknown): boolean {
   return error instanceof OllamaUnavailableError || error instanceof OllamaModelMissingError;
 }
-
-export function isRequestResolutionError(error: unknown): boolean {
-  return error instanceof RequestResolutionError;
-}

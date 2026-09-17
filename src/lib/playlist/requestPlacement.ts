@@ -1,5 +1,5 @@
-import { titlesEquivalent } from "@/lib/music/matchSemantics";
-import { normalizeText } from "@/lib/music/normalize";
+import { titlesEquivalent } from "@/lib/shared/matchSemantics";
+import { normalizeText } from "@/lib/shared/normalize";
 import { parseDeclaredTrackPlacement, parseReplacementIntent } from "@/lib/playlist/requestLexing";
 import type { BoundNamedTrack, BoundTrackPlacement, DeclaredTrackPlacement, PlaylistState } from "@/types/playlist";
 

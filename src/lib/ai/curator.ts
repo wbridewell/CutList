@@ -14,7 +14,9 @@ import { resolveOperatorPlan } from "@/lib/ai/services/operatorPlanner";
 import { resolveCuratorRequestPlan } from "@/lib/ai/services/requestResolution";
 import { handlePlaylistShapeRequest } from "@/lib/ai/services/playlistShapeService";
 import { evaluatePlaylistConstraints } from "@/lib/playlist/constraints";
-import type { CuratorResponse, PlaylistState } from "@/types/playlist";
+import { detectUnsupportedCatalogQuery, isStrictReorderOnlyRequest, type UnsupportedCatalogQueryKind } from "@/lib/playlist/requestLexing";
+import { requestPlanFingerprint } from "@/lib/playlist/requestPlanFingerprint";
+import type { CuratorResponse, PlaylistState, ResolvedOperatorPlan } from "@/types/playlist";
 
 export type { CuratorProgressEvent } from "@/lib/ai/curatorTypes";
 export { handleAnalyzePlaylist, handleImportChat };
@@ -29,38 +31,35 @@ function logCuratorDebugError(stage: "request_resolution" | "workflow_execution"
   console.error(`[cutlist:timing] ${stage}_error id=${timingId} error_name=${errorName} error_message=${JSON.stringify(errorMessage)}`);
 }
 
-function isStrictReorderOnlyRequest(userMessage: string): boolean {
-  const hasReorderIntent = /\b(re-?order|reorganize|resequence|sequence|sequencing|arrange|rearrange|flow|arc|transition|transitions|group|cluster|separate)\b/i.test(userMessage);
-  const forbidsStructuralChanges = /\bwithout\b(?:.{0,60})\b(?:add(?:ing)?|remov(?:e|ing))\b/i.test(userMessage) ||
-    /\b(?:do not|don't|never)\s+(?:add|remove)\b/i.test(userMessage) ||
-    /\bwithout changing\b(?:.{0,30})\b(?:track list|tracks|songs|track count)\b/i.test(userMessage) ||
-    /\bkeep\b(?:.{0,20})\b(?:the same tracks|all the tracks|all the songs)\b/i.test(userMessage) ||
-    /\bno additions? or removals?\b/i.test(userMessage);
-  return hasReorderIntent && forbidsStructuralChanges;
-}
-
-function detectUnsupportedCatalogQuery(userMessage: string): "album_tracks" | "artist_songs" | null {
-  const normalized = userMessage.trim();
-  if (
-    /^(?:what|which)\s+(?:songs|tracks)\s+are\s+on\s+.+/i.test(normalized) ||
-    /^list\s+(?:the\s+)?(?:songs|tracks)\s+on\s+.+/i.test(normalized)
-  ) {
-    return "album_tracks";
-  }
-  if (
-    /^(?:what|which)\s+(?:songs|tracks)\s+by\s+.+/i.test(normalized) ||
-    /^list\s+(?:the\s+)?(?:songs|tracks)\s+by\s+.+/i.test(normalized)
-  ) {
-    return "artist_songs";
-  }
-  return null;
-}
-
-function unsupportedCatalogQueryMessage(queryType: "album_tracks" | "artist_songs"): string {
+function unsupportedCatalogQueryMessage(queryType: UnsupportedCatalogQueryKind): string {
   if (queryType === "album_tracks") {
     return "I can verify tracks and edit the playlist, but I can't safely list an album's tracklist from the current metadata path. Ask me to add a specific song from that album instead.";
   }
   return "I can verify tracks and edit the playlist, but I can't safely list an artist's songs from the current metadata path. Ask me to add a specific song instead.";
+}
+
+// The client already ran the operator planner once for its plan preview. Reuse that plan
+// when it was computed for exactly this message, playlist, and conversation; otherwise
+// plan again, which is what happens for the curator half of a mixed request, whose prompt
+// is a different string from the one previewed.
+async function operatorPlanForMessage(
+  playlist: PlaylistState,
+  userMessage: string,
+  options: CuratorRunOptions
+): Promise<{ operatorPlan: ResolvedOperatorPlan; reusedPrecomputedPlan: boolean }> {
+  const precomputed = options.precomputedPlan;
+  if (precomputed) {
+    const expected = requestPlanFingerprint({
+      playlist,
+      userMessage,
+      conversationContext: options.conversationContext,
+      forceReadOnly: false
+    });
+    if (precomputed.fingerprint === expected) {
+      return { operatorPlan: precomputed.operatorPlan, reusedPrecomputedPlan: true };
+    }
+  }
+  return { operatorPlan: await resolveOperatorPlan(playlist, userMessage, options), reusedPrecomputedPlan: false };
 }
 
 export async function handlePlaylistMessage(
@@ -88,9 +87,10 @@ export async function handlePlaylistMessage(
       rejectedCandidates: []
     };
   }
-  const operatorPlan = await resolveOperatorPlan(playlist, userMessage, options);
+  const { operatorPlan, reusedPrecomputedPlan } = await operatorPlanForMessage(playlist, userMessage, options);
   emitReviewRoutingTrace("backend.handlePlaylistMessage.operatorPlan", {
     requestId: options.requestId ?? null,
+    reusedPrecomputedPlan,
     routeFamily: operatorPlan.routeFamily,
     executionPolicy: operatorPlan.executionPolicy,
     planTemplate: operatorPlan.planTemplate,

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { writeFileAtomicSync } from "@/lib/desktop/atomicFile";
+import { writeFileAtomicSync } from "@/lib/shared/atomicFile";
 
 let tempDir: string;
 

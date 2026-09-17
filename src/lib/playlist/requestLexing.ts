@@ -209,7 +209,7 @@ export function hasNonModificationDirective(userMessage: string): boolean {
     /\bno\b.{0,10}\bmodifications?\b/i.test(userMessage);
 }
 
-export function hasAddIntent(userMessage: string): boolean {
+function hasAddIntent(userMessage: string): boolean {
   if (/\b(?:do not|don't|never)\s+add\b/i.test(userMessage)) {
     return false;
   }
@@ -424,17 +424,35 @@ export function parseReplacementIntent(userMessage: string): LexedReplacementInt
   };
 }
 
-export function lexRequest(userMessage: string): LexedRequest {
-  const replacementIntent = parseReplacementIntent(userMessage);
-  return {
-    hasReviewSignals: hasReviewSignals(userMessage),
-    hasCuratorSignals: hasCuratorSignals(userMessage),
-    hasNonModificationDirective: hasNonModificationDirective(userMessage),
-    requestedTrackCount: parseRequestedTrackCount(userMessage),
-    replacementCount: parseReplacementCount(userMessage),
-    targetTotalTrackCount: parseTargetTotalTrackCount(userMessage),
-    shapeStrength: parseShapeIntentStrength(userMessage),
-    placement: parseDeclaredTrackPlacement(userMessage),
-    replacementIntent
-  };
+// A reorder request that also rules out adding or removing tracks. The curator facade
+// routes these straight to the shape service instead of the full step planner.
+export function isStrictReorderOnlyRequest(userMessage: string): boolean {
+  const hasReorderIntent = /\b(re-?order|reorganize|resequence|sequence|sequencing|arrange|rearrange|flow|arc|transition|transitions|group|cluster|separate)\b/i.test(userMessage);
+  const forbidsStructuralChanges = /\bwithout\b(?:.{0,60})\b(?:add(?:ing)?|remov(?:e|ing))\b/i.test(userMessage) ||
+    /\b(?:do not|don't|never)\s+(?:add|remove)\b/i.test(userMessage) ||
+    /\bwithout changing\b(?:.{0,30})\b(?:track list|tracks|songs|track count)\b/i.test(userMessage) ||
+    /\bkeep\b(?:.{0,20})\b(?:the same tracks|all the tracks|all the songs)\b/i.test(userMessage) ||
+    /\bno additions? or removals?\b/i.test(userMessage);
+  return hasReorderIntent && forbidsStructuralChanges;
+}
+
+export type UnsupportedCatalogQueryKind = "album_tracks" | "artist_songs";
+
+// Questions that ask for a catalog listing the metadata providers cannot answer safely.
+// The facade answers these with a fixed explanation before any planning happens.
+export function detectUnsupportedCatalogQuery(userMessage: string): UnsupportedCatalogQueryKind | null {
+  const normalized = userMessage.trim();
+  if (
+    /^(?:what|which)\s+(?:songs|tracks)\s+are\s+on\s+.+/i.test(normalized) ||
+    /^list\s+(?:the\s+)?(?:songs|tracks)\s+on\s+.+/i.test(normalized)
+  ) {
+    return "album_tracks";
+  }
+  if (
+    /^(?:what|which)\s+(?:songs|tracks)\s+by\s+.+/i.test(normalized) ||
+    /^list\s+(?:the\s+)?(?:songs|tracks)\s+by\s+.+/i.test(normalized)
+  ) {
+    return "artist_songs";
+  }
+  return null;
 }

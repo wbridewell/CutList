@@ -12,7 +12,7 @@ import {
 } from "@/lib/desktop/backend";
 import type { DesktopBackendPayloadMap, DesktopBackendResultMap, DesktopError } from "@/lib/desktop/contracts";
 import { classifyBackendError } from "@/lib/desktop/errors";
-import { timeAsync } from "@/lib/debugTiming";
+import { timeAsync } from "@/lib/debug/timing";
 import type { ExportResponse } from "@/types/playlist";
 
 type CommandEnvelope = {

@@ -7,7 +7,7 @@ import { LLMProviderNotConfiguredError } from "@/lib/ai/providerErrors";
 let client: OpenAI | null = null;
 let clientApiKey: string | null = null;
 
-export function getOpenAIClient(config: EffectiveLLMConfig = resolveLLMConfig()): OpenAI {
+function getOpenAIClient(config: EffectiveLLMConfig = resolveLLMConfig()): OpenAI {
   if (!config.openaiApiKey) {
     throw new LLMProviderNotConfiguredError("openai");
   }

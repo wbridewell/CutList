@@ -285,7 +285,7 @@ export const exportFormatRegistry: PlaylistExportFormatDefinition[] = [
   }
 ];
 
-export function getPlaylistExportFormat(format: PlaylistExportFormat): PlaylistExportFormatDefinition {
+function getPlaylistExportFormat(format: PlaylistExportFormat): PlaylistExportFormatDefinition {
   const definition = exportFormatRegistry.find((item) => item.id === format);
   if (!definition) {
     throw new Error(`Unknown playlist export format: ${format}`);

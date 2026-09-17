@@ -1,4 +1,4 @@
-import { normalizeText } from "@/lib/music/normalize";
+import { normalizeText } from "@/lib/shared/normalize";
 import type {
   PlaylistState,
   ReviewSuggestion,

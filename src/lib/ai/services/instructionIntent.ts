@@ -7,7 +7,7 @@ import { playlistConstraintFieldNames } from "@/lib/playlist/schemas";
 import type { CuratorRunOptions } from "@/lib/ai/curatorTypes";
 import type { InstructionIntent, PlaylistConstraints, PlaylistState } from "@/types/playlist";
 
-export const verifiedRuleConstraintFields = new Set<keyof PlaylistConstraints>([
+const verifiedRuleConstraintFields = new Set<keyof PlaylistConstraints>([
   "maxTrackDurationMs",
   "minTrackDurationMs",
   "minBpm",
@@ -29,7 +29,7 @@ export const verifiedRuleConstraintFields = new Set<keyof PlaylistConstraints>([
   "allowExplicit"
 ]);
 
-export const curatorGuidanceConstraintFields = new Set<keyof PlaylistConstraints>([
+const curatorGuidanceConstraintFields = new Set<keyof PlaylistConstraints>([
   "requiredArtists",
   "preferredGenres",
   "requiredGenreAdditions",
@@ -108,7 +108,7 @@ export function mergeConstraintLayers(...layers: Array<PlaylistConstraints | und
   return mergeConstraintLayersWithRegistry(...layers);
 }
 
-export function pickConstraintFields(
+function pickConstraintFields(
   constraints: PlaylistConstraints | undefined,
   allowedFields: Set<keyof PlaylistConstraints>,
   scopedFields?: InstructionConstraintField[]
@@ -152,7 +152,7 @@ function uniqueScopeFields(fields: InstructionConstraintField[]): InstructionCon
   return [...new Set(fields)];
 }
 
-export function scopeFieldsForConstraints(
+function scopeFieldsForConstraints(
   constraints: PlaylistConstraints,
   allowedFields: Set<keyof PlaylistConstraints>
 ): InstructionConstraintField[] {
@@ -269,15 +269,6 @@ export async function parseInstructionIntentDetailed(
     throw attempt.error;
   }
   return { intent: attempt.parsed, status: attempt.status };
-}
-
-export async function parseInstructionIntent(
-  playlist: PlaylistState,
-  userMessage: string,
-  options: CuratorRunOptions = {}
-): Promise<InstructionIntent | null> {
-  const result = await parseInstructionIntentDetailed(playlist, userMessage, options);
-  return result.intent;
 }
 
 export function withNormalizedInstructionScope(

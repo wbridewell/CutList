@@ -9,7 +9,9 @@ import type { LocalSessionSummary } from "@/lib/playlist/io/localDraft";
 import type { PlaylistOperationUndoPayload } from "@/lib/playlist/operations";
 import type { AnalyzePlaylistResponse, AttemptedMatch, PlaylistState, ReviewSuggestion } from "@/types/playlist";
 
-export type UtilitySection = "session" | "issues" | "inputs" | "history";
+import type { UtilitySection } from "@/hooks/useWorkspaceNavigation";
+
+export type { UtilitySection };
 
 type Props = {
   activeMode: UtilitySection | null;

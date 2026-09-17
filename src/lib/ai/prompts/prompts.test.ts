@@ -1,16 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  candidatePrompt,
-  critiquePrompt,
-  getCuratorPersona,
-  instructionIntentPrompt,
-  operatorPlanPrompt,
-  playlistRemovalPrompt,
-  playlistShapePrompt,
-  transitionRepairPrompt
-} from "@/lib/ai/prompts";
+import { candidatePrompt, critiquePrompt, getCuratorPersona, instructionIntentPrompt, operatorPlanPrompt, playlistRemovalPrompt, playlistShapePrompt, transitionRepairPrompt } from "@/lib/ai/prompts";
 import { readLocalLLMSettings } from "@/lib/ai/llmConfig";
-import type { PlaylistState } from "@/types/playlist";
+import { buildPlaylist } from "@/lib/testing/builders";
 
 vi.mock("@/lib/ai/llmConfig", async () => {
   const actual = await vi.importActual<typeof import("@/lib/ai/llmConfig")>("@/lib/ai/llmConfig");
@@ -20,17 +11,7 @@ vi.mock("@/lib/ai/llmConfig", async () => {
   };
 });
 
-const playlist: PlaylistState = {
-  id: "test",
-  title: "Test",
-  mood: null,
-  arc: null,
-  tracks: [],
-  constraints: {},
-  discoveryRadius: "moderate",
-  conversationSummary: null,
-  updatedAt: "2026-05-27T00:00:00Z"
-};
+const playlist = buildPlaylist({ id: "test", updatedAt: "2026-05-27T00:00:00Z" });
 
 describe("curator prompt personas", () => {
   afterEach(() => {

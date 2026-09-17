@@ -14,7 +14,7 @@ import { evaluatePlaylistConstraints } from "@/lib/playlist/constraints";
 import { parseTrackRowsFromText } from "@/lib/playlist/io/textImport";
 import { removeAlternateTrackVersions } from "@/lib/playlist/analysis/versionCleanup";
 import { explicitlyRequestedSuppressionFingerprints } from "@/lib/playlist/candidateSuppression";
-import { normalizeText } from "@/lib/music/normalize";
+import { normalizeText } from "@/lib/shared/normalize";
 import { parseReplacementIntent } from "@/lib/playlist/requestLexing";
 import { bindDeclaredTrackPlacement, detectDeclaredTrackPlacement } from "@/lib/playlist/requestPlacement";
 import type { PlaylistConstraints, PlaylistState, ResolvedOperatorPlan, Track } from "@/types/playlist";

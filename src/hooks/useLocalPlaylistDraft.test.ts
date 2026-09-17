@@ -1,19 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { autosaveFailureMessage, decideWorkspaceLoad, recoveryNoticeMessage, workspaceLoadOutcomeAfterQuarantine } from "@/hooks/useLocalPlaylistDraft";
+import { buildPlaylist } from "@/lib/testing/builders";
 import type { DesktopWorkspaceStateReadResult } from "@/lib/desktop/contracts";
-import type { PlaylistState } from "@/types/playlist";
 
-const playlist: PlaylistState = {
-  id: "test",
-  title: "Draft",
-  mood: null,
-  arc: null,
-  tracks: [],
-  constraints: {},
-  discoveryRadius: "moderate",
-  conversationSummary: null,
-  updatedAt: "2026-05-27T00:00:00Z"
-};
+const playlist = buildPlaylist({ id: "test", title: "Draft", updatedAt: "2026-05-27T00:00:00Z" });
 
 const validState = {
   version: 1 as const,

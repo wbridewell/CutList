@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { restoreCuratorTurnUndoState, reviewHasIssues, shouldClearStaleReviewState } from "@/components/ChatPanel";
+import { buildPlaylist } from "@/lib/testing/builders";
 import { classifyComposerRequest } from "@/lib/client/workflows";
 import type { RequestHistoryEntry } from "@/lib/playlist/collaboration";
-import type { AnalyzePlaylistResponse, PlaylistState } from "@/types/playlist";
+import type { AnalyzePlaylistResponse } from "@/types/playlist";
 
 const review: AnalyzePlaylistResponse = {
   reviewMode: "full_critique",
@@ -35,17 +36,7 @@ const historyEntry: RequestHistoryEntry = {
   reviewSuggestions: []
 };
 
-const playlist: PlaylistState = {
-  id: "playlist-1",
-  title: "Test",
-  mood: null,
-  arc: null,
-  tracks: [],
-  constraints: {},
-  discoveryRadius: "moderate",
-  conversationSummary: null,
-  updatedAt: "2026-06-20T00:01:00.000Z"
-};
+const playlist = buildPlaylist({ updatedAt: "2026-06-20T00:01:00.000Z" });
 
 describe("ChatPanel stale review cleanup", () => {
   it("clears stale review state when the backing entry disappears", () => {

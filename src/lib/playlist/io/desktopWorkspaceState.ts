@@ -2,7 +2,7 @@ import "server-only";
 
 import { rmSync } from "node:fs";
 import { resolve } from "node:path";
-import { writeFileAtomicSync } from "@/lib/desktop/atomicFile";
+import { writeFileAtomicSync } from "@/lib/shared/atomicFile";
 import {
   parsePersistedWorkspaceState,
   serializePersistedWorkspaceState,

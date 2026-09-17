@@ -153,10 +153,6 @@ export function isRemovalIntent(userMessage: string): boolean {
   return collectCuratorHeuristics(userMessage).operation.removal;
 }
 
-export function isVersionCleanupIntent(userMessage: string): boolean {
-  return collectCuratorHeuristics(userMessage).specialCases.versionCleanup;
-}
-
 export function isReplacementIntent(userMessage: string): boolean {
   return collectCuratorHeuristics(userMessage).operation.replacement;
 }
@@ -182,30 +178,10 @@ export function isAdditionIntent(userMessage: string): boolean {
   return collectCuratorHeuristics(userMessage).operation.addition;
 }
 
-export function hasPersistentScopeLanguage(userMessage: string): boolean {
-  return collectCuratorHeuristics(userMessage).scope.persistent;
-}
-
-export function hasRequestScopedLanguage(userMessage: string): boolean {
-  return collectCuratorHeuristics(userMessage).scope.requestScoped;
-}
-
-export function isMixedEditAndGenerationIntent(userMessage: string): boolean {
-  return collectCuratorHeuristics(userMessage).operation.mixedEditAndGeneration;
-}
-
 export function shouldPruneExistingForConstraints(userMessage: string, constraints: PlaylistConstraints): boolean {
   return collectCuratorHeuristics(userMessage, constraints).specialCases.shouldPruneExistingForConstraints;
 }
 
-export function isConversationalOnly(userMessage: string): boolean {
-  return collectCuratorHeuristics(userMessage).specialCases.conversationalOnly;
-}
-
 export function isPlaylistShapeIntent(userMessage: string): boolean {
   return collectCuratorHeuristics(userMessage).operation.shapeStrength !== "none";
-}
-
-export function isStrongPlaylistShapeIntent(userMessage: string): boolean {
-  return collectCuratorHeuristics(userMessage).operation.shapeStrength === "strong";
 }

@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { buildCuratorStepPlan } from "@/lib/ai/services/stepPlanner";
+import { buildPlaylist } from "@/lib/testing/builders";
 import { collectCuratorHeuristics } from "@/lib/ai/services/curatorRequestIntent";
 import { normalizeInstructionIntentLayers } from "@/lib/ai/services/instructionIntent";
-import type { PlaylistState, Track } from "@/types/playlist";
+import type { Track } from "@/types/playlist";
 
 vi.mock("@/lib/ai/llmClient", () => ({
   getLLMProvider: vi.fn(() => "none")
@@ -30,21 +31,15 @@ function track(id: string, title: string, artist: string): Track {
   };
 }
 
-const playlist: PlaylistState = {
+const playlist = buildPlaylist({
   id: "playlist",
-  title: "Test",
-  mood: null,
-  arc: null,
   tracks: [
     track("track-1", "Army of Me", "Bjork"),
     track("track-2", "Firestarter", "The Prodigy"),
     track("track-3", "Roads", "Portishead")
   ],
-  constraints: {},
-  discoveryRadius: "moderate",
-  conversationSummary: null,
   updatedAt: "2026-06-29T00:00:00.000Z"
-};
+});
 
 async function buildPlan(userMessage: string) {
   const heuristics = collectCuratorHeuristics(userMessage, playlist.constraints);

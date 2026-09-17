@@ -1,6 +1,6 @@
 type PromptLine = string | null | undefined | false;
 
-export function compactPromptLines(lines: PromptLine[]): string[] {
+function compactPromptLines(lines: PromptLine[]): string[] {
   return lines.filter((line): line is string => typeof line === "string" && line.length > 0);
 }
 

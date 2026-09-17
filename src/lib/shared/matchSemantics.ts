@@ -1,4 +1,4 @@
-import { normalizeLooseTitle, normalizeText, normalizeVersionlessText, tokenOverlapScore } from "@/lib/music/normalize";
+import { normalizeLooseTitle, normalizeText, normalizeVersionlessText, tokenOverlapScore } from "@/lib/shared/normalize";
 
 export type TitleEquivalence = {
   exact: boolean;

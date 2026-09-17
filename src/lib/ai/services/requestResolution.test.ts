@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { resolveCuratorRequestPlan } from "@/lib/ai/services/requestResolution";
+import { buildPlaylist } from "@/lib/testing/builders";
 import type { PlaylistState, Track } from "@/types/playlist";
 
 vi.mock("@/lib/ai/llmClient", () => ({
@@ -28,21 +29,15 @@ function track(id: string, title: string, artist: string): Track {
   };
 }
 
-const playlist: PlaylistState = {
+const playlist = buildPlaylist({
   id: "playlist",
-  title: "Test",
-  mood: null,
-  arc: null,
   tracks: [
     track("track-1", "First", "A"),
     track("track-2", "Second", "B"),
     track("track-3", "Third", "C")
   ],
-  constraints: {},
-  discoveryRadius: "moderate",
-  conversationSummary: null,
   updatedAt: "2026-06-18T00:00:00.000Z"
-};
+});
 
 describe("request resolution step planning", () => {
   it("preserves remove-then-reorder order from the user prompt", async () => {

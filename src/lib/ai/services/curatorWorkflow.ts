@@ -14,12 +14,7 @@ import { resolveNamedTrack } from "@/lib/playlist/requestPlacement";
 import { parsePlacementSubjectQuery } from "@/lib/playlist/requestLexing";
 import { moveTrackAfterTrack, moveTrackBeforeTrack } from "@/lib/playlist/state";
 import type { CuratorResponse, PlaylistConstraints, PlaylistState, Track } from "@/types/playlist";
-import type {
-  CuratorPlannedStep,
-  ResolvedCuratorRequestPlan,
-  StepExecutionResult,
-  WorkflowExecutionResult
-} from "@/lib/ai/services/workflowTypes";
+import type { CuratorPlannedStep, ResolvedCuratorRequestPlan, StepExecutionResult } from "@/lib/ai/services/workflowTypes";
 
 type ExecutionContext = {
   playlist: PlaylistState;
@@ -639,26 +634,4 @@ export async function executeResolvedCuratorPlan(
   const finalResponse = collapseFinalResponse(plan.playlist, context, summaryMessage);
 
   return finalResponse;
-}
-
-export async function executeResolvedCuratorWorkflow(
-  plan: ResolvedCuratorRequestPlan,
-  options: CuratorRunOptions = {}
-): Promise<WorkflowExecutionResult> {
-  const finalResponse = await executeResolvedCuratorPlan(plan, options);
-  const finalPlaylist = {
-    ...plan.playlist,
-    title: finalResponse.playlistMeta?.title ?? plan.playlist.title,
-    mood: finalResponse.playlistMeta?.mood ?? plan.playlist.mood,
-    arc: finalResponse.playlistMeta?.arc ?? plan.playlist.arc,
-    tracks: finalResponse.playlistUpdate ? applyPlaylistUpdateTracks(plan.playlist.tracks, finalResponse.playlistUpdate) : plan.playlist.tracks,
-    constraints: finalResponse.updatedConstraints ?? plan.playlist.constraints
-  };
-  return {
-    finalResponse,
-    finalPlaylist,
-    finalActiveConstraints: mergeConstraintLayers(finalResponse.updatedConstraints, undefined),
-    finalPersistedConstraints: finalResponse.updatedConstraints ?? plan.playlist.constraints,
-    stepResults: []
-  };
 }

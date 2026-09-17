@@ -1,13 +1,6 @@
 import { z } from "zod";
-import {
-  BoundTrackPlacementSchema,
-  CuratorResponseSchema,
-  PlaylistStateSchema,
-  RejectedCandidateSchema,
-  ReplacementModeSchema,
-  ReviewSuggestionSchema
-} from "@/lib/playlist/schemas";
-import type { CuratorResponse, PlaylistState } from "@/types/playlist";
+import { BoundTrackPlacementSchema, PlaylistStateSchema, RejectedCandidateSchema, ReplacementModeSchema, ReviewSuggestionSchema } from "@/lib/playlist/schemas";
+import type { PlaylistState } from "@/types/playlist";
 export {
   createCuratorUndoHistoryEntry,
   createErrorHistoryEntry,
@@ -17,10 +10,10 @@ export {
   type RequestHistoryEntry
 } from "@/lib/playlist/collaboration";
 import type { ChatMessage, RequestHistoryEntry } from "@/lib/playlist/collaboration";
-import { CuratorPersonaSchema, type CuratorPersona } from "@/lib/desktop/settingsSchemas";
+import { CuratorPersonaSchema, type CuratorPersona } from "@/lib/shared/settingsSchemas";
 
-export const LOCAL_DRAFT_VERSION = 1;
-export const PERSISTED_WORKSPACE_STATE_VERSION = 1;
+const LOCAL_DRAFT_VERSION = 1;
+const PERSISTED_WORKSPACE_STATE_VERSION = 1;
 export type { CuratorPersona };
 
 export type LocalDraftV1 = {
@@ -272,9 +265,4 @@ export function serializePersistedWorkspaceState(input: PersistedWorkspaceStateV
     sessions: input.sessions,
     activeSessionId: input.activeSessionId
   }, null, 2)}\n`;
-}
-
-export function parseCuratorResponseForHistory(value: unknown): CuratorResponse | null {
-  const result = CuratorResponseSchema.safeParse(value);
-  return result.success ? result.data : null;
 }

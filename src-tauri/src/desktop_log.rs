@@ -44,7 +44,7 @@ pub fn resolve_log_path(app: &AppHandle) -> Result<PathBuf, String> {
     }
 
     if cfg!(debug_assertions) {
-        return Ok(crate::project_root()
+        return Ok(crate::runtime::project_root()
             .join(".cutlist-desktop-data")
             .join("logs")
             .join("cutlist.log"));

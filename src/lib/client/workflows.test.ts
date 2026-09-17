@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { DesktopCommandError } from "@/lib/client/desktopApi";
 import {
   effectiveDiscoveryRadiusForRequest,
@@ -30,6 +30,7 @@ import type {
   PlaylistState,
   Track
 } from "@/types/playlist";
+import type { PrecomputedOperatorPlan } from "@/types/playlist";
 
 function track(overrides: Partial<Track> = {}): Track {
   return {
@@ -974,5 +975,26 @@ describe("errorMessageForWorkflow", () => {
 
   it("falls back to the fallback message for an unrecognized plain error", () => {
     expect(errorMessageForWorkflow(new Error(""), "Request failed.")).toBe("Request failed. Your playlist is unchanged.");
+  });
+});
+
+describe("runCuratorRequestWorkflow plan handoff", () => {
+  it("forwards the precomputed operator plan to the message command", async () => {
+    const precomputedPlan = { operatorPlan: { routeFamily: "curator" }, fingerprint: "abc-1" } as unknown as PrecomputedOperatorPlan;
+    const sendMessage = vi.fn(async () => ({
+      message: "Done.",
+      playlistUpdate: null,
+      playlistMeta: null,
+      updatedConstraints: {},
+      constraintReport: { passed: true, totalDurationMs: 0, violations: [], evidenceWarnings: [] },
+      rejectedCandidates: []
+    }));
+
+    await runCuratorRequestWorkflow(
+      { messages: [], outgoing: "Add two tracks.", playlist: playlist(), precomputedPlan },
+      { onProgress: () => undefined, sendMessage }
+    );
+
+    expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ precomputedPlan }), expect.anything());
   });
 });

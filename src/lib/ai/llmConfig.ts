@@ -3,14 +3,14 @@ import "server-only";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { z } from "zod";
-import { writeFileAtomicSync } from "@/lib/desktop/atomicFile";
+import { writeFileAtomicSync } from "@/lib/shared/atomicFile";
 
 import {
   CuratorPersonaSchema,
   LLMProviderSchema,
   type CuratorPersona,
   type LLMProvider
-} from "@/lib/desktop/settingsSchemas";
+} from "@/lib/shared/settingsSchemas";
 
 export { CuratorPersonaSchema, LLMProviderSchema };
 export type { CuratorPersona, LLMProvider };
@@ -71,9 +71,9 @@ const defaultConfig: EffectiveLLMConfig = {
   timeoutMs: 120_000
 };
 
-export const defaultCuratorPersona: CuratorPersona = "razor";
+const defaultCuratorPersona: CuratorPersona = "razor";
 
-export const LOCAL_LLM_SETTINGS_PATH = ".cutlist.local-settings.json";
+const LOCAL_LLM_SETTINGS_PATH = ".cutlist.local-settings.json";
 
 function settingsPath(): string {
   const explicitPath = process.env.CUTLIST_LLM_SETTINGS_PATH;
@@ -142,7 +142,7 @@ export function resolveLLMConfig(env: NodeJS.ProcessEnv = process.env): Effectiv
   };
 }
 
-export function llmModelForProvider(config: EffectiveLLMConfig): string {
+function llmModelForProvider(config: EffectiveLLMConfig): string {
   if (config.provider === "openai") {
     return config.openaiModel;
   }

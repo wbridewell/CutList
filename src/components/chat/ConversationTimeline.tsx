@@ -111,7 +111,7 @@ function matchActionLabel(match: AttemptedMatch, allowAccept: boolean): string {
   return "Accept match";
 }
 
-export function sortedConversationHistory(history: RequestHistoryEntry[]): RequestHistoryEntry[] {
+function sortedConversationHistory(history: RequestHistoryEntry[]): RequestHistoryEntry[] {
   return [...history].sort((a, b) => entryTime(b) - entryTime(a));
 }
 

@@ -1,4 +1,4 @@
-import { normalizeText } from "@/lib/music/normalize";
+import { normalizeText } from "@/lib/shared/normalize";
 import { acceptedCountForPlaylistUpdate, summarizePlaylistUpdate } from "@/lib/playlist/operations";
 import { formatRuntime } from "@/lib/playlist/runtime";
 import type {
@@ -69,7 +69,7 @@ type RequestHistoryOptions = {
   pendingEditContext?: PendingEditContext;
 };
 
-export function createCollaborationId(createdAt = new Date().toISOString()): string {
+function createCollaborationId(createdAt = new Date().toISOString()): string {
   return `${createdAt}:${Math.random().toString(36).slice(2)}`;
 }
 

@@ -11,7 +11,7 @@ import {
 import { handleAnalyzePlaylist, handleImportChat, handlePlaylistMessage, type CuratorProgressEvent } from "@/lib/ai/curator";
 import type { CuratorRunOptions } from "@/lib/ai/curatorTypes";
 import { emitReviewRoutingTrace } from "@/lib/debug/reviewRouting";
-import { CuratorPersonaSchema, LLMProviderSchema } from "@/lib/desktop/settingsSchemas";
+import { CuratorPersonaSchema, LLMProviderSchema } from "@/lib/shared/settingsSchemas";
 import {
   CuratorResponseSchema,
   AnalyzePlaylistRequestSchema,
@@ -125,7 +125,8 @@ export async function desktopPlaylistMessage(
   const response = await handlePlaylistMessage(input.playlist, input.userMessage, {
     ...options,
     conversationContext: input.conversationContext,
-    requestId: input.requestId
+    requestId: input.requestId,
+    precomputedPlan: input.precomputedPlan
   });
   return CuratorResponseSchema.parse(response);
 }

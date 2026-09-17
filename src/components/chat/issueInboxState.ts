@@ -50,7 +50,7 @@ export type IssueInboxItem =
   | VerifiedRuleInboxItem
   | EvidenceNoteInboxItem;
 
-export function reviewSuggestionHeadingLabel(suggestion: ReviewSuggestion): string {
+function reviewSuggestionHeadingLabel(suggestion: ReviewSuggestion): string {
   const label = suggestion.type === "compress_section"
     ? "Compress section"
     : suggestion.type.replace(/_/g, " ");

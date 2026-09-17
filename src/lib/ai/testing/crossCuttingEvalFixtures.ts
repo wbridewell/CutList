@@ -2,7 +2,7 @@ import { z } from "zod";
 import { PlaylistStateSchema } from "@/lib/playlist/schemas";
 import type { DiscoveryRadius, PlaylistConstraints } from "@/types/playlist";
 
-export const CrossCuttingWorkflowKindSchema = z.enum([
+const CrossCuttingWorkflowKindSchema = z.enum([
   "generate",
   "review",
   "replace",

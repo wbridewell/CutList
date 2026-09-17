@@ -4,7 +4,7 @@ import { activeRequestScopedConstraints } from "@/lib/ai/services/constraintLife
 import { attemptLlmContract } from "@/lib/ai/services/llmService";
 import { enforceNewTracks, evaluatePlaylistConstraints } from "@/lib/playlist/constraints";
 import { filteredSuppressedCandidates, promptSuppressedCandidateEntries } from "@/lib/playlist/candidateSuppression";
-import { normalizeText } from "@/lib/music/normalize";
+import { normalizeText } from "@/lib/shared/normalize";
 import { verifyTrack } from "@/lib/music/verifyTrack";
 import { insertTracksAfterTrack, insertTracksBeforeTrack } from "@/lib/playlist/state";
 import type { CuratorRunOptions } from "@/lib/ai/curatorTypes";

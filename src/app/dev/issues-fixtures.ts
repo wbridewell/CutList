@@ -8,7 +8,7 @@ import {
 import { evaluatePlaylistConstraints } from "@/lib/playlist/constraints";
 import type { AnalyzePlaylistResponse, PlaylistState, RejectedCandidate, ReviewSuggestion, Track } from "@/types/playlist";
 
-export const baseTracks: Track[] = [
+const baseTracks: Track[] = [
   {
     id: "track-1",
     title: "Neon Weather",
@@ -137,7 +137,7 @@ export const basePlaylist: PlaylistState = {
   updatedAt: "2026-06-13T18:00:00.000Z"
 };
 
-export const baseRejectedCandidates: RejectedCandidate[] = [
+const baseRejectedCandidates: RejectedCandidate[] = [
   {
     artist: "Lumen Park",
     title: "Night Drive (Live)",

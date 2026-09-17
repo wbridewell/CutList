@@ -569,14 +569,6 @@
   padding: 0;
 }
 
-.chat-history {
-  display: grid;
-  flex: 1 1 auto;
-  grid-template-rows: auto minmax(0, 1fr);
-  min-height: 0;
-  overflow: hidden;
-}
-
 .latest-response-region {
   min-height: 14rem;
   min-width: 0;
@@ -584,26 +576,6 @@
 
 .latest-response-region .active-exchange {
   min-height: 14rem;
-}
-
-.chat-log {
-  display: grid;
-  gap: 0.75rem;
-  min-height: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
-  padding-right: 0.45rem;
-  scrollbar-gutter: stable;
-}
-
-.compact-chat-history {
-  flex: 0 0 auto;
-  min-height: 10rem;
-  min-width: 0;
-}
-
-.compact-chat-history .chat-log {
-  max-height: 18rem;
 }
 
 .active-exchange {
@@ -716,14 +688,6 @@
   100% {
     box-shadow: 0 0 0 0 rgba(255, 189, 67, 0);
   }
-}
-
-.drawer-rejected .rejection-disclosure {
-  margin-top: 0;
-}
-
-.drawer-rejected .rejection-list {
-  margin-top: 0.75rem;
 }
 
 .drawer-history-panel .conversation-timeline {
@@ -1009,18 +973,6 @@
   gap: 0.45rem;
   justify-content: flex-start;
   margin-top: 0.2rem;
-}
-
-.advanced-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-  margin-top: 0.45rem;
-}
-
-.export-guidance {
-  color: var(--muted);
-  margin-bottom: 0.75rem;
 }
 
 .dialog-backdrop {

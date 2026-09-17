@@ -1,5 +1,5 @@
 import { MetadataProviderError, type MusicMetadataProvider, type TrackSearchQuery, type TrackSearchResult } from "@/lib/music/providers/providerTypes";
-import { metadataUserAgent } from "@/lib/appVersion";
+import { metadataUserAgent } from "@/lib/shared/appVersion";
 import { createMinIntervalThrottle, type RequestThrottle } from "@/lib/music/providers/requestThrottle";
 
 type MusicBrainzArtistCredit = {

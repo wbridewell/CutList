@@ -3,8 +3,8 @@ import {
   normalizeArtist,
   normalizeText,
   tokenOverlapScore
-} from "@/lib/music/normalize";
-import { albumsEquivalent, compareTitles } from "@/lib/music/matchSemantics";
+} from "@/lib/shared/normalize";
+import { albumsEquivalent, compareTitles } from "@/lib/shared/matchSemantics";
 import { verificationPolicy, type MatchConfidence } from "@/lib/music/verificationPolicy";
 import type { TrackSearchQuery, TrackSearchResult } from "@/lib/music/providers/providerTypes";
 

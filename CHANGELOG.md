@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Curator requests are planned once: the plan preview now hands its operator plan to the message command, which reuses it when the message, tracks, rules, and conversation are unchanged instead of asking the model to plan again.
+- ESLint enforces the module layer direction (`app` → `components` → `hooks` → `client` → `desktop` → `ai` → `music` → `playlist` → `types`); the seven imports that ran against it are fixed, and a `shared` layer holds normalization, atomic writes, the app version, and the provider enums.
+- Repository invariant tests keep the three desktop command registries in sync, fail on unused exports, and require every environment variable the code reads to be listed in `.env.example`.
+- The schema, prompt, constraint, and client workflow hub files are split into domain modules behind barrels that re-export the same names; the Rust shell's `main.rs` is split into runtime, backend, command, error, and timing modules.
+- Added shared test fixture builders; removed dead exports and orphaned CSS; dropped the `Legacy` names.
+- Agent docs: a request pipeline map, a module map with the import boundaries, the full add-a-command procedure, and a `CLAUDE.md`.
 - Fixed provider API keys never reaching the macOS Keychain: the desktop shell compiled keyring's in-memory mock store, so a key saved in `LLM setup` vanished on the next backend call. Keys now persist in the Keychain; a plaintext key left in the settings file by earlier builds is migrated on first launch and removed only once the Keychain can read it back.
 - Autosave now reports write failures instead of showing the draft as saved, and flushes before the window closes or the app quits.
 - Help, Report Issue, Save Workspace As, and Toggle Developer Tools now work inside the desktop shell. Command Palette is removed until it exists.

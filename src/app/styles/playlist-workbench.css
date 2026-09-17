@@ -58,14 +58,8 @@
 
 .playlist-summary,
 .playlist-tracks,
-.playlist-outputs {
-  border-color: rgba(255, 189, 67, 0.22);
-}
 
 .command-composer,
-.chat-history {
-  border-color: rgba(78, 231, 224, 0.25);
-}
 
 .section-header {
   align-items: flex-start;
@@ -145,19 +139,10 @@
   padding-right: 0.25rem;
 }
 
-.playlist-output-copy {
-  display: grid;
-  gap: 0.35rem;
-}
-
 .playlist-output-copy strong,
 .playlist-support-drawer strong {
   color: #f6dfaa;
   font-size: 0.8rem;
-}
-
-.playlist-output-copy p {
-  margin: 0;
 }
 
 .playlist-output-actions {
@@ -404,13 +389,6 @@
   border-color: rgba(238, 116, 109, 0.74);
 }
 
-.button-ghost {
-  background: transparent;
-  border-color: transparent;
-  color: var(--muted);
-  min-height: 2.15rem;
-}
-
 .button-compact {
   min-height: 2.15rem;
   padding: 0.38rem 0.58rem;
@@ -438,11 +416,6 @@
   background: rgba(238, 116, 109, 0.08);
   border-color: rgba(238, 116, 109, 0.36);
   color: #ffd0cc;
-}
-
-.chip-muted {
-  border-color: rgba(246, 240, 218, 0.12);
-  color: rgba(246, 240, 218, 0.58);
 }
 
 .chip-action {
@@ -499,10 +472,6 @@
   color: #d7f6af;
 }
 
-.constraint-guidance {
-  margin-bottom: 0;
-}
-
 .playlist-rules-drawer {
   background: rgba(0, 0, 0, 0.16);
   border: 1px solid rgba(255, 189, 67, 0.16);
@@ -535,17 +504,6 @@
 
 .playlist-rules-drawer .constraint-summary {
   margin-top: 0.7rem;
-}
-
-.constraint-status-details summary {
-  color: var(--cyan);
-  cursor: pointer;
-  font-family: var(--mono);
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  list-style-position: inside;
-  text-transform: uppercase;
 }
 
 .constraint-status {
@@ -585,10 +543,6 @@
   font-weight: 700;
 }
 
-.constraint-status-details {
-  margin-top: 0.35rem;
-}
-
 .constraint-violation-list {
   display: grid;
   gap: 0.35rem;
@@ -604,11 +558,6 @@
   letter-spacing: 0;
   margin: 0;
   text-transform: none;
-}
-
-.constraint-more {
-  color: #ffe3a6;
-  margin-top: 0.45rem;
 }
 
 .constraint-status-failed {

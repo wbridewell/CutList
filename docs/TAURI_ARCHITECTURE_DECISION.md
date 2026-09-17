@@ -213,6 +213,10 @@ Near-term improvements should focus on boundary quality rather than rewrites:
 
 Native file open/save dialogs are part of the first desktop-polish pass, not a prerequisite for the architecture. Desktop export now uses a native save dialog; browser blob download remains only as the non-Tauri fallback path.
 
+## Module Layout
+
+The shell is split by responsibility rather than kept in one file: `runtime.rs` (find and validate the backend), `backend.rs` (spawn, stream, cancel), `commands/` (native-only commands), `error.rs`, `secrets.rs`, `desktop_log.rs`, with `main.rs` reduced to handler registration. A TypeScript test, `src/lib/desktop/commandRegistry.test.ts`, fails when the handler list, the command functions, and the Node dispatcher disagree.
+
 ## Summary
 
 CutList should remain a Tauri desktop app with a trusted TypeScript product backend.

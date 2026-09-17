@@ -19,6 +19,7 @@
 - [Tauri desktop alpha](DESKTOP_TAURI.md)
 - [macOS DMG alpha](MACOS_DMG_ALPHA.md)
 - [LLM agent orientation](llm/PROJECT_ORIENTATION.md)
+- [Request pipeline](llm/REQUEST_PIPELINE.md)
 
 ## Archive
 

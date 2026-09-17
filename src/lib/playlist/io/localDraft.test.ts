@@ -1,30 +1,9 @@
 import { describe, expect, it } from "vitest";
-import {
-  createRequestHistoryEntry,
-  createLocalSessionId,
-  defaultLocalSessionName,
-  materializeLocalSessionSnapshot,
-  parsePersistedWorkspaceState,
-  parseLocalDraft,
-  serializePersistedWorkspaceState,
-  serializeLocalDraft,
-  validatePersistedWorkspaceStateValue,
-  type ChatMessage,
-  type RequestHistoryEntry
-} from "@/lib/playlist/io/localDraft";
-import type { CuratorResponse, PlaylistState, Track } from "@/types/playlist";
+import { createRequestHistoryEntry, createLocalSessionId, defaultLocalSessionName, materializeLocalSessionSnapshot, parsePersistedWorkspaceState, parseLocalDraft, serializePersistedWorkspaceState, serializeLocalDraft, validatePersistedWorkspaceStateValue, type ChatMessage, type RequestHistoryEntry } from "@/lib/playlist/io/localDraft";
+import type { CuratorResponse, Track } from "@/types/playlist";
+import { buildPlaylist } from "@/lib/testing/builders";
 
-const playlist: PlaylistState = {
-  id: "test",
-  title: "Draft",
-  mood: null,
-  arc: null,
-  tracks: [],
-  constraints: {},
-  discoveryRadius: "moderate",
-  conversationSummary: null,
-  updatedAt: "2026-05-27T00:00:00Z"
-};
+const playlist = buildPlaylist({ id: "test", title: "Draft", updatedAt: "2026-05-27T00:00:00Z" });
 
 const track: Track = {
   id: "itunes:1",

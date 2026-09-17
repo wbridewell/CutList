@@ -4,6 +4,7 @@ import type {
   CuratorResponse,
   ImportChatResponse,
   PlaylistState,
+  PrecomputedOperatorPlan,
   ReviewMode,
   ResolvedUserRequestPlan
 } from "@/types/playlist";
@@ -23,7 +24,13 @@ import { isTauriApp } from "@/lib/client/tauriRuntime";
 export type VerifySeedsResponse = Awaited<ReturnType<typeof invokeDesktopVerify>>;
 
 export async function sendPlaylistMessageStream(
-  input: { playlist: PlaylistState; requestId?: string; userMessage: string; conversationContext?: ConversationContext },
+  input: {
+    playlist: PlaylistState;
+    requestId?: string;
+    userMessage: string;
+    conversationContext?: ConversationContext;
+    precomputedPlan?: PrecomputedOperatorPlan;
+  },
   callbacks: { onProgress: (message: string) => void; signal?: AbortSignal }
 ): Promise<CuratorResponse> {
   return invokeDesktopMessage(input, callbacks);

@@ -33,7 +33,7 @@ export type PlaylistShapeResult = {
   orderRationale: string | null;
 };
 
-export async function requestPlaylistShape(
+async function requestPlaylistShape(
   playlist: PlaylistState,
   userMessage: string,
   options: CuratorRunOptions & { postEditShape?: boolean } = {}

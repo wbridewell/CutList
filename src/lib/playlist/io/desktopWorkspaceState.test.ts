@@ -3,24 +3,14 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { writeDesktopWorkspaceState } from "@/lib/playlist/io/desktopWorkspaceState";
+import { buildPlaylist } from "@/lib/testing/builders";
 import { materializeLocalSessionSnapshot, parsePersistedWorkspaceState } from "@/lib/playlist/io/localDraft";
 import type { PersistedWorkspaceStateV1 } from "@/lib/playlist/io/localDraft";
-import type { PlaylistState } from "@/types/playlist";
 
 let tempDir: string;
 let statePath: string;
 
-const playlist: PlaylistState = {
-  id: "test",
-  title: "Draft",
-  mood: null,
-  arc: null,
-  tracks: [],
-  constraints: {},
-  discoveryRadius: "moderate",
-  conversationSummary: null,
-  updatedAt: "2026-05-27T00:00:00Z"
-};
+const playlist = buildPlaylist({ id: "test", title: "Draft", updatedAt: "2026-05-27T00:00:00Z" });
 
 function sampleState(): PersistedWorkspaceStateV1 {
   const savedAt = "2026-05-27T00:00:00Z";

@@ -1,4 +1,4 @@
-import { normalizedTrackKey, normalizeText } from "@/lib/music/normalize";
+import { normalizedTrackKey, normalizeText } from "@/lib/shared/normalize";
 import type {
   CandidateTrack,
   PlaylistState,
@@ -19,11 +19,11 @@ type CandidateIdentity = {
 
 const maxPromptEntries = 12;
 
-export function candidateSuppressionFingerprint(identity: CandidateIdentity): string {
+function candidateSuppressionFingerprint(identity: CandidateIdentity): string {
   return normalizedTrackKey(identity.artist, identity.title);
 }
 
-export function shouldAutoSuppressRejectedCandidate(candidate: RejectedCandidate): boolean {
+function shouldAutoSuppressRejectedCandidate(candidate: RejectedCandidate): boolean {
   return candidate.rejectionCode === "noCredibleMatch" && !candidate.violatedConstraint;
 }
 
@@ -45,7 +45,7 @@ export function suppressionFingerprintFromRejectedCandidate(
   };
 }
 
-export function mergeSuppressedCandidateFingerprints(
+function mergeSuppressedCandidateFingerprints(
   existing: SuppressedCandidateFingerprint[] | undefined,
   additions: Array<SuppressedCandidateFingerprint | null | undefined>
 ): SuppressedCandidateFingerprint[] {
@@ -98,7 +98,7 @@ export function explicitlyRequestedSuppressionFingerprints(
   return fingerprints;
 }
 
-export function suppressionDecisionForCandidate(
+function suppressionDecisionForCandidate(
   identity: CandidateIdentity,
   entries: SuppressedCandidateFingerprint[] | undefined,
   overriddenFingerprints: Set<string> = new Set()
@@ -114,7 +114,7 @@ export function suppressionDecisionForCandidate(
   };
 }
 
-export function isCandidateSuppressed(
+function isCandidateSuppressed(
   identity: CandidateIdentity,
   entries: SuppressedCandidateFingerprint[] | undefined,
   overriddenFingerprints: Set<string> = new Set()
@@ -130,15 +130,6 @@ export function promptSuppressedCandidateEntries(
   return (entries ?? [])
     .filter((entry) => !overriddenFingerprints.has(entry.fingerprint))
     .slice(0, limit);
-}
-
-export function promptSuppressedCandidateLines(
-  entries: SuppressedCandidateFingerprint[] | undefined,
-  overriddenFingerprints: Set<string> = new Set(),
-  limit = maxPromptEntries
-): string[] {
-  return promptSuppressedCandidateEntries(entries, overriddenFingerprints, limit)
-    .map((entry) => `${entry.artist} - ${entry.title}`);
 }
 
 export function updatePlaylistSuppressedCandidates(

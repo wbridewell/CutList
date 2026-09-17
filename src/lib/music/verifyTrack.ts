@@ -1,8 +1,8 @@
 import { artistMatchKind, rankMatches, type ScoredMatch } from "@/lib/music/matchScore";
-import { logTiming, timeAsync } from "@/lib/debugTiming";
+import { logTiming, timeAsync } from "@/lib/debug/timing";
 import { reviewAttemptedMatchesWithLLM } from "@/lib/music/llmMatchReview";
-import { albumsEquivalent, titlesEquivalent } from "@/lib/music/matchSemantics";
-import { normalizedTrackKey, normalizeText } from "@/lib/music/normalize";
+import { albumsEquivalent, titlesEquivalent } from "@/lib/shared/matchSemantics";
+import { normalizedTrackKey, normalizeText } from "@/lib/shared/normalize";
 import type { MusicMetadataProvider, TrackSearchQuery, TrackSearchResult } from "@/lib/music/providers/providerTypes";
 import { createDefaultMetadataProviders, verificationPolicy, type VerificationRejectionCode } from "@/lib/music/verificationPolicy";
 import { formatRuntime } from "@/lib/playlist/runtime";

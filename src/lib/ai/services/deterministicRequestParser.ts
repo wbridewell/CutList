@@ -1,15 +1,11 @@
 import { parseDiscoveryRadiusOverride } from "@/lib/playlist/discoveryRadius";
+import { parseExplicitRequestedTrackClause, parseExplicitRequestedTracks } from "@/lib/playlist/explicitTrackRequests";
 import type { ParsedTrackLine } from "@/lib/playlist/io/textImport";
 import {
   containsAddIntent,
-  containsAnalyzeIntent,
-  containsExplicitReorderIntent,
-  containsRemoveIntent,
-  containsReplaceIntent,
   inferLexedClauseOperations,
   isPlainConversationalMessage,
   normalizeClauseText,
-  parsePlacementSubjectQuery,
   parseReplacementCount,
   parseRequestedTrackCount,
   parseShapeIntentStrength,
@@ -147,19 +143,6 @@ function isUsableGenreQuotaLabel(value: string): boolean {
     !/^than\b/i.test(normalized);
 }
 
-function cleanRequestedTrackFragment(value: string): string {
-  return value.trim().replace(/^[,.;:!?]+|[,.;:!?]+$/g, "").trim();
-}
-
-function looksLikeRequestedCountPlaceholder(value: string): boolean {
-  return /^(?:a|an|one|two|three|four|five|six|seven|eight|nine|ten|\d+|some|few|couple)\s+(?:more\s+)?(?:songs?|tracks?)$/i.test(value.trim());
-}
-
-function isConstraintDeclaration(userMessage: string): boolean {
-  return /\badd(?:ing)?\s+(?:a\s+)?(?:constraint|rule)\b/i.test(userMessage) ||
-    /\b(?:make|set)\s+(?:a\s+)?(?:constraint|rule)\b/i.test(userMessage);
-}
-
 function hasConstraintCleanupLanguage(userMessage: string): boolean {
   return /\b(remove|delete|drop|cut|prune|clear)\b/i.test(userMessage) ||
     /\bcuts\b/i.test(userMessage) ||
@@ -186,50 +169,6 @@ function hasPersistentVocalProfileLanguage(text: string): boolean {
   return /\b(?:only|all|exclusively|must be|should be)\b.{0,24}\b(?:female|women|woman|girl|male|men|man|boy|mixed|duet|instrumental|no vocals|without vocals|no singing)\b/i.test(text) ||
     /\b(?:female|women|woman|girl|male|men|man|boy|mixed|duet)\s+(?:vocals?|vocalists?|singers?|voices?)\b.{0,24}\b(?:only|exclusively)\b/i.test(text) ||
     /\b(?:instrumental|no vocals|without vocals|no singing)\s+only\b/i.test(text);
-}
-
-export function parseExplicitRequestedTracks(text: string): ParsedTrackLine[] {
-  return splitOrderedClauses(text).flatMap((clause) => parseExplicitRequestedTrackClause(clause.text));
-}
-
-function parseExplicitRequestedTrackClause(text: string): ParsedTrackLine[] {
-  const normalized = normalizeClauseText(text);
-  if (!normalized || isConstraintDeclaration(normalized) || !containsAddIntent(normalized)) {
-    return [];
-  }
-
-  // ponytail: exact-track parsing only applies to a single add clause, not a whole mixed prompt.
-  if (containsRemoveIntent(normalized) || containsReplaceIntent(normalized) || containsExplicitReorderIntent(normalized) || containsAnalyzeIntent(normalized)) {
-    return [];
-  }
-
-  const coveredByMatch = normalized.match(/\badd\s+(.+?)\s+covered by\s+(.+)$/i);
-  if (coveredByMatch) {
-    const title = cleanRequestedTrackFragment(coveredByMatch[1] ?? "");
-    const artistSegments = (coveredByMatch[2] ?? "")
-      .split(/\s+and\s+covered by\s+/i)
-      .map((segment) => cleanRequestedTrackFragment(segment))
-      .filter(Boolean);
-    if (title && !looksLikeRequestedCountPlaceholder(title) && artistSegments.length > 0) {
-      return artistSegments.map((artist) => ({ title, artist, album: null }));
-    }
-  }
-
-  const byArtistMatch = normalized.match(/\badd\s+(.+?)\s+by\s+(.+)$/i);
-  if (byArtistMatch) {
-    const title = cleanRequestedTrackFragment(byArtistMatch[1] ?? "");
-    const artist = cleanRequestedTrackFragment(byArtistMatch[2] ?? "");
-    if (title && !looksLikeRequestedCountPlaceholder(title) && artist) {
-      return [{ title, artist, album: null }];
-    }
-  }
-
-  const placementSubject = parsePlacementSubjectQuery(normalized);
-  if (placementSubject && !looksLikeRequestedCountPlaceholder(placementSubject)) {
-    return [{ title: placementSubject, artist: "", album: null }];
-  }
-
-  return [];
 }
 
 function inferClauseOperations(clause: string): DeterministicOperationKind[] {
@@ -584,3 +523,5 @@ export function parseDeterministicRequest(
 }
 
 export { parseReplacementCount, parseTargetTotalTrackCount };
+
+export { parseExplicitRequestedTracks };

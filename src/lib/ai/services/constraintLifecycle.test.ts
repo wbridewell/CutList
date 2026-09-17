@@ -1,19 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { buildConstraintExecutionState } from "@/lib/ai/services/constraintLifecycle";
+import { buildPlaylist } from "@/lib/testing/builders";
 import { mergeConstraintLayers, normalizeInstructionIntentLayers } from "@/lib/ai/services/instructionIntent";
-import type { PlaylistState } from "@/types/playlist";
 
-const playlist: PlaylistState = {
-  id: "playlist",
-  title: "Test",
-  mood: null,
-  arc: null,
-  tracks: [],
-  constraints: {},
-  discoveryRadius: "moderate",
-  conversationSummary: null,
-  updatedAt: "2026-06-25T00:00:00.000Z"
-};
+const playlist = buildPlaylist({ id: "playlist", updatedAt: "2026-06-25T00:00:00.000Z" });
 
 describe("buildConstraintExecutionState", () => {
   it("preserves existing persistent guidance when adding a new hard rule", () => {

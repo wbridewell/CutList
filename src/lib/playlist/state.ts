@@ -1,4 +1,4 @@
-import { normalizeText } from "@/lib/music/normalize";
+import { normalizeText } from "@/lib/shared/normalize";
 import { applyPlaylistUpdateTracks } from "@/lib/playlist/operations";
 import { updatePlaylistSuppressedCandidates } from "@/lib/playlist/candidateSuppression";
 import type { CuratorResponse, DiscoveryRadius, PlaylistConstraints, PlaylistState, Track } from "@/types/playlist";
@@ -238,7 +238,7 @@ export function removePlaylistConstraint(
   return constraints === playlist.constraints ? playlist : { ...playlist, constraints, updatedAt };
 }
 
-export function removeConstraintByKey(constraints: PlaylistConstraints, key: string): PlaylistConstraints {
+function removeConstraintByKey(constraints: PlaylistConstraints, key: string): PlaylistConstraints {
   const [field, indexText] = key.split(":");
   const next = { ...constraints };
 

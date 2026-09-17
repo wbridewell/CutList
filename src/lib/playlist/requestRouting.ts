@@ -5,22 +5,22 @@ import {
   splitOrderedClauses
 } from "@/lib/playlist/requestLexing";
 
-export type LegacyComposerRequestKind = "review_only" | "curator_only" | "mixed_review_and_curator";
+export type ComposerRequestKind = "review_only" | "curator_only" | "mixed_review_and_curator";
 
 export type MixedComposerRequestPrompts = {
   reviewPrompt: string;
   curatorPrompt: string;
 };
 
-export function hasReviewSignals(userMessage: string): boolean {
+function hasReviewSignals(userMessage: string): boolean {
   return sharedHasReviewSignals(userMessage);
 }
 
-export function hasNonModificationDirective(userMessage: string): boolean {
+function hasNonModificationDirective(userMessage: string): boolean {
   return sharedHasNonModificationDirective(userMessage);
 }
 
-export function hasCuratorSignals(userMessage: string): boolean {
+function hasCuratorSignals(userMessage: string): boolean {
   return sharedHasCuratorSignals(userMessage);
 }
 
@@ -30,7 +30,7 @@ function cleanComposerClause(clause: string): string {
     .trim();
 }
 
-export function splitComposerIntentClauses(userMessage: string): string[] {
+function splitComposerIntentClauses(userMessage: string): string[] {
   if (!userMessage.trim()) {
     return [];
   }
@@ -74,7 +74,9 @@ export function reviewPromptForComposerRequest(userMessage: string): string {
   return trimmed;
 }
 
-export function classifyComposerRequestLegacy(userMessage: string, hasTracks: boolean): LegacyComposerRequestKind | "curator_only" {
+// Classifies by lexical cues alone. The planner is the authority for routing; this is the
+// client-side fallback used before a plan exists.
+export function classifyComposerRequestFromCues(userMessage: string, hasTracks: boolean): ComposerRequestKind {
   if (!hasTracks) {
     return "curator_only";
   }

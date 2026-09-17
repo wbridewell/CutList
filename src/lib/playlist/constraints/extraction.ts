@@ -1,5 +1,4 @@
 import type { PlaylistConstraints } from "@/types/playlist";
-import { parseDeterministicRequest } from "@/lib/ai/services/deterministicRequestParser";
 
 const NUMBER_WORDS: Record<string, number> = {
   one: 1,
@@ -321,7 +320,3 @@ export const constraintExtractionPatterns: ConstraintExtractionPattern[] = [
     }
   }
 ];
-
-export function mergeExtractedConstraints(current: PlaylistConstraints, userMessage: string): PlaylistConstraints {
-  return parseDeterministicRequest(userMessage, current).deterministicConstraints;
-}

@@ -1,5 +1,5 @@
 import type { PlaylistConstraints } from "@/types/playlist";
-import { parseExplicitRequestedTracks as parseExplicitRequestedTracksFromDeterministicParser } from "@/lib/ai/services/deterministicRequestParser";
+import { parseExplicitRequestedTracks as parseExplicitRequestedTracksFromRequest } from "@/lib/playlist/explicitTrackRequests";
 
 export type ParsedTrackLine = {
   title: string;
@@ -123,7 +123,7 @@ export function parseTrackRowsFromText(text: string, options: ParseTrackRowsOpti
 }
 
 export function parseExplicitRequestedTracks(text: string): ParsedTrackLine[] {
-  return parseExplicitRequestedTracksFromDeterministicParser(text);
+  return parseExplicitRequestedTracksFromRequest(text);
 }
 
 export function emptyConstraints(): PlaylistConstraints {

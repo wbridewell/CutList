@@ -1,4 +1,4 @@
-import { normalizeText } from "@/lib/music/normalize";
+import { normalizeText } from "@/lib/shared/normalize";
 import { evaluatePlaylistConstraints } from "@/lib/playlist/constraints";
 import { createCompressionSuggestion, type CompressionRequest } from "@/lib/playlist/analysis/compression";
 import { formatRuntime } from "@/lib/playlist/runtime";

@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { handleAnalyzePlaylist, handleImportChat, handlePlaylistMessage } from "@/lib/ai/curator";
+import { buildPlaylist } from "@/lib/testing/builders";
 import { mergeConstraintLayers } from "@/lib/ai/services/instructionIntent";
 import { resolveOperatorPlan } from "@/lib/ai/services/operatorPlanner";
 import { getJsonFromLLM, getLLMProvider } from "@/lib/ai/llmClient";
 import { verifyTrack, verifyTracks } from "@/lib/music/verifyTrack";
-import type { PlaylistState, ResolvedOperatorPlan, Track } from "@/types/playlist";
+import { requestPlanFingerprint } from "@/lib/playlist/requestPlanFingerprint";
+import type { ResolvedOperatorPlan, Track } from "@/types/playlist";
 
 vi.mock("@/lib/ai/llmClient", () => ({
   getJsonFromLLM: vi.fn(async () => {
@@ -24,17 +26,7 @@ vi.mock("@/lib/ai/services/operatorPlanner", () => ({
   resolveOperatorPlan: vi.fn()
 }));
 
-const playlist: PlaylistState = {
-  id: "test",
-  title: "Test",
-  mood: null,
-  arc: null,
-  tracks: [],
-  constraints: {},
-  discoveryRadius: "moderate",
-  conversationSummary: null,
-  updatedAt: "2026-05-27T00:00:00Z"
-};
+const playlist = buildPlaylist({ id: "test", updatedAt: "2026-05-27T00:00:00Z" });
 
 const verifiedTrack: Track = {
   id: "itunes:1",
@@ -1580,5 +1572,54 @@ describe("curator LLM boundaries", () => {
     ]);
     expect(result.constraintReport.passed).toBe(true);
     expect(vi.mocked(getJsonFromLLM).mock.calls[1][0]).toContain("The user needs 2 accepted tracks");
+  });
+});
+
+describe("precomputed operator plans", () => {
+  const conversationalPlan = {
+    routeFamily: "conversational",
+    executionPolicy: "read_only",
+    planTemplate: "conversational_reply",
+    operators: [{ kind: "conversational_reply" }],
+    planningNotes: ["Test plan."]
+  } as unknown as ResolvedOperatorPlan;
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(getLLMProvider).mockReturnValue("none");
+    vi.mocked(resolveOperatorPlan).mockResolvedValue(conversationalPlan);
+  });
+
+  it("reuses the client's plan when it was computed for this exact message and playlist", async () => {
+    const result = await handlePlaylistMessage(playlist, "hello", {
+      precomputedPlan: {
+        operatorPlan: conversationalPlan,
+        fingerprint: requestPlanFingerprint({ playlist, userMessage: "hello" })
+      }
+    });
+
+    expect(result.message).toContain("Ready when you are");
+    expect(vi.mocked(resolveOperatorPlan)).not.toHaveBeenCalled();
+  });
+
+  it("plans again when the fingerprint does not match the request it receives", async () => {
+    await handlePlaylistMessage(playlist, "hello", {
+      precomputedPlan: { operatorPlan: conversationalPlan, fingerprint: "stale" }
+    });
+
+    expect(vi.mocked(resolveOperatorPlan)).toHaveBeenCalledTimes(1);
+  });
+
+  it("plans again when the playlist changed after the preview was taken", async () => {
+    const previewedAgainst = { ...playlist, tracks: [...playlist.tracks, acceptedTrack("track-late", "Late Addition")] };
+
+    await handlePlaylistMessage(playlist, "hello", {
+      precomputedPlan: {
+        operatorPlan: conversationalPlan,
+        fingerprint: requestPlanFingerprint({ playlist: previewedAgainst, userMessage: "hello" })
+      }
+    });
+
+    expect(vi.mocked(resolveOperatorPlan)).toHaveBeenCalledTimes(1);
   });
 });

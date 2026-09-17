@@ -1,16 +1,8 @@
-import {
-  applyRequestedCountToGlobalGenreRequirements,
-  buildConstraintDomainModel,
-  curatorGuidanceConstraintFields,
-  mergeConstraintLayers,
-  pickCuratorGuidanceConstraints,
-  pickVerifiedRuleConstraints,
-  reconcileDurationPolarity
-} from "@/lib/ai/services/instructionIntent";
+import { applyRequestedCountToGlobalGenreRequirements, buildConstraintDomainModel, mergeConstraintLayers, pickCuratorGuidanceConstraints, pickVerifiedRuleConstraints, reconcileDurationPolarity } from "@/lib/ai/services/instructionIntent";
 import type { ConstraintExecutionState } from "@/lib/ai/services/workflowTypes";
 import type { NormalizedInstructionIntent } from "@/lib/ai/services/instructionIntent";
 import type { PlaylistConstraints, PlaylistState, Track } from "@/types/playlist";
-import { normalizeText } from "@/lib/music/normalize";
+import { normalizeText } from "@/lib/shared/normalize";
 
 function compactConstraints(constraints: PlaylistConstraints): PlaylistConstraints {
   const next: PlaylistConstraints = {};
@@ -155,12 +147,4 @@ export function buildConstraintExecutionState(input: {
 
 export function activeRequestScopedConstraints(state: ConstraintExecutionState): PlaylistConstraints {
   return mergeConstraintLayers(state.requestScopedVerifiedRules, state.requestScopedGuidance);
-}
-
-export function activePersistentConstraints(state: ConstraintExecutionState): PlaylistConstraints {
-  return mergeConstraintLayers(state.persistentVerifiedRules, state.persistentGuidance);
-}
-
-export function isGuidanceField(field: keyof PlaylistConstraints): boolean {
-  return curatorGuidanceConstraintFields.has(field);
 }

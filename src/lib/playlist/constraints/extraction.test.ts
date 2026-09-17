@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { constraintExtractionPatterns, mergeExtractedConstraints } from "@/lib/playlist/constraints/extraction";
+import { parseDeterministicRequest } from "@/lib/ai/services/deterministicRequestParser";
+import { constraintExtractionPatterns } from "@/lib/playlist/constraints/extraction";
+import type { PlaylistConstraints } from "@/types/playlist";
+
+// The patterns are applied by the deterministic parser; this exercises them through it.
+function mergeExtractedConstraints(current: PlaylistConstraints, userMessage: string): PlaylistConstraints {
+  return parseDeterministicRequest(userMessage, current).deterministicConstraints;
+}
 
 describe("constraint extraction", () => {
   it("defines extraction patterns with unique ids", () => {
