@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 - 2026-09-16
 
 - Curator requests are planned once: the plan preview now hands its operator plan to the message command, which reuses it when the message, tracks, rules, and conversation are unchanged instead of asking the model to plan again.
 - ESLint enforces the module layer direction (`app` → `components` → `hooks` → `client` → `desktop` → `ai` → `music` → `playlist` → `types`); the seven imports that ran against it are fixed, and a `shared` layer holds normalization, atomic writes, the app version, and the provider enums.
