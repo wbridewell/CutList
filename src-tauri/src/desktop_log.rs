@@ -44,7 +44,10 @@ pub fn resolve_log_path(app: &AppHandle) -> Result<PathBuf, String> {
     }
 
     if cfg!(debug_assertions) {
-        return Ok(crate::project_root().join(".cutlist-desktop-data").join("logs").join("cutlist.log"));
+        return Ok(crate::project_root()
+            .join(".cutlist-desktop-data")
+            .join("logs")
+            .join("cutlist.log"));
     }
 
     let app_data_dir = app
@@ -57,7 +60,8 @@ pub fn resolve_log_path(app: &AppHandle) -> Result<PathBuf, String> {
 pub fn ensure_log_file(app: &AppHandle) -> Result<PathBuf, String> {
     let path = resolve_log_path(app)?;
     if let Some(parent) = path.parent() {
-        create_dir_all(parent).map_err(|error| format!("Failed to create log directory: {error}"))?;
+        create_dir_all(parent)
+            .map_err(|error| format!("Failed to create log directory: {error}"))?;
     }
     if !path.exists() {
         OpenOptions::new()
@@ -81,14 +85,16 @@ fn timestamp_prefix() -> String {
 // so a long-running app never accumulates an unbounded log on disk.
 fn rotate_and_append(path: &Path, line: &str) -> Result<(), String> {
     if let Some(parent) = path.parent() {
-        create_dir_all(parent).map_err(|error| format!("Failed to create log directory: {error}"))?;
+        create_dir_all(parent)
+            .map_err(|error| format!("Failed to create log directory: {error}"))?;
     }
 
     if let Ok(existing) = metadata(path) {
         if existing.len() + line.len() as u64 + 1 > MAX_LOG_BYTES {
             let rotated_path = path.with_extension("log.1");
             let _ = remove_file(&rotated_path);
-            rename(path, &rotated_path).map_err(|error| format!("Failed to rotate log file: {error}"))?;
+            rename(path, &rotated_path)
+                .map_err(|error| format!("Failed to rotate log file: {error}"))?;
         }
     }
 
@@ -122,7 +128,10 @@ mod tests {
     fn unique_temp_dir(prefix: &str) -> PathBuf {
         std::env::temp_dir().join(format!(
             "{prefix}-{}",
-            SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
         ))
     }
 
@@ -206,7 +215,10 @@ mod tests {
 
         let rotated_path = test_dir.join("cutlist.log.1");
         assert!(rotated_path.exists());
-        assert_eq!(read_to_string(&rotated_path).unwrap().len(), MAX_LOG_BYTES as usize);
+        assert_eq!(
+            read_to_string(&rotated_path).unwrap().len(),
+            MAX_LOG_BYTES as usize
+        );
         let contents = read_to_string(&path).unwrap();
         assert!(contents.contains("line after rotation"));
         assert!(!contents.contains('x'));

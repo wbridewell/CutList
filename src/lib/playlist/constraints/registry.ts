@@ -1,5 +1,5 @@
 import { normalizeText } from "@/lib/music/normalize";
-import { formatRuntime, sumDurations } from "@/lib/playlist/runtime";
+import { formatRuntime } from "@/lib/playlist/runtime";
 import type { ConstraintFinding, EvidenceFieldKey, PlaylistConstraints, Track } from "@/types/playlist";
 
 export type ConstraintRuleCategory = "hard" | "evidence" | "guidance" | "sequence";

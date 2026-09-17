@@ -1,6 +1,6 @@
 # The CutList
 
-![CutList logo banner](./public/cutlist_banner_app.png)
+![CutList logo banner](./assets/brand/cutlist_banner_app.png)
 
 The CutList is a Tauri desktop app with a Next.js TypeScript UI for verified collaborative playlist curation. It uses an LLM for taste, interpretation, and candidate suggestions, then relies on provider metadata, Zod validation, and deterministic constraints before anything enters the accepted playlist.
 
@@ -60,7 +60,11 @@ npm run dev
 
 ## Configuration
 
-The default development provider is Ollama, so OpenAI tokens are not required for local generation, extraction, or critique.
+The normal setup path is the in-app `LLM setup` dialog: choose a provider, paste a key for Gemini or OpenAI, and run `Save and test`. Cloud keys are stored in the macOS Keychain. The code default is Gemini.
+
+Environment variables are development overrides. They are read from the shell that launches `npm run dev`, and in development builds also from `.env.local`; packaged builds ignore `.env.local`.
+
+To use local Ollama instead, so no cloud key is needed:
 
 ```bash
 ollama pull granite4.1:8b
@@ -97,7 +101,6 @@ LLM_PROVIDER=none
 ```
 
 See `.env.example` for the full environment list. Do not prefix private keys with `NEXT_PUBLIC_`.
-The normal setup path is the in-app `LLM setup` dialog; environment variables remain useful as development/debug overrides.
 
 ## Development
 
@@ -116,7 +119,7 @@ npm run build:dmg
 `npm run build` builds the static frontend used by the desktop app.
 `npm run build:dmg` builds the macOS release DMG and bundled desktop runtime. It uses the bundled portable Node when available; set `CUTLIST_NODE_RUNTIME_PATH` only when you need to provide a different standalone macOS Node binary.
 
-`npm run lint` currently aliases the TypeScript check because this prototype has not added an ESLint configuration yet.
+`npm run lint` runs ESLint with the Next.js and TypeScript rule sets; `npm run typecheck` runs the compiler separately.
 
 ## Testing
 

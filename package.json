@@ -7,6 +7,9 @@
     "url": "https://github.com/wbridewell"
   },
   "private": true,
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "tauri dev",
     "next:dev": "next dev",
@@ -19,10 +22,9 @@
     "sync:public": "node scripts/sync-public.mjs",
     "sync:public:push": "node scripts/sync-public.mjs --push-origin",
     "start-alpha": "node scripts/first-run.mjs --start-alpha",
-    "tauri:dev": "tauri dev",
     "tauri:build": "CUTLIST_RELEASE_PACKAGING=1 tauri build --bundles app --config src-tauri/tauri.release.conf.json",
     "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
-    "lint": "npm run typecheck",
+    "lint": "eslint .",
     "prompt:harness": "vitest run --config vitest.prompt-harness.config.ts --reporter=dot",
     "eval:cross-cutting": "vitest run --config vitest.cross-cutting-eval.config.ts --reporter=dot",
     "test": "vitest run",
@@ -38,16 +40,18 @@
     "zod": "3.25.28"
   },
   "overrides": {
-    "postcss": "8.5.15",
+    "postcss": "8.5.28",
     "form-data": "4.0.6",
     "hasown": "2.0.4"
   },
   "devDependencies": {
+    "@eslint/eslintrc": "^3.3.7",
     "@tauri-apps/cli": "^2.9.0",
-    "@testing-library/react": "16.3.0",
     "@types/node": "22.15.21",
     "@types/react": "19.0.12",
     "@types/react-dom": "19.0.4",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^15.5.25",
     "tsx": "^4.20.6",
     "typescript": "5.8.3",
     "vitest": "^4.1.8"

@@ -29,6 +29,14 @@ if (!commandExists("npm")) {
   process.exit(1);
 }
 
+// `npm run dev` compiles the Tauri desktop shell, so this path needs Rust even though the
+// tester never touches it. Fail here with a pointer instead of deep inside cargo's output.
+if (!commandExists("cargo")) {
+  console.error("The Rust toolchain is required to run the app from source. Install it from https://rustup.rs/ and run this command again.");
+  console.error("If you would rather not install Rust, ask for the DMG build instead (see docs/ALPHA_TEST_GUIDE.md).");
+  process.exit(1);
+}
+
 if (!existsSync("node_modules") && isReturnLaunch) {
   console.error("App dependencies are not installed yet.");
   console.error("Run `npm run first-run` once, then use `npm run start-alpha` for later launches.");

@@ -11,6 +11,7 @@ import {
 import { handleAnalyzePlaylist, handleImportChat, handlePlaylistMessage, type CuratorProgressEvent } from "@/lib/ai/curator";
 import type { CuratorRunOptions } from "@/lib/ai/curatorTypes";
 import { emitReviewRoutingTrace } from "@/lib/debug/reviewRouting";
+import { CuratorPersonaSchema, LLMProviderSchema } from "@/lib/desktop/settingsSchemas";
 import {
   CuratorResponseSchema,
   AnalyzePlaylistRequestSchema,
@@ -47,12 +48,12 @@ import type {
 // desktop_set_provider_secret command, called directly from the client before this
 // command runs. See saveLLMSetup in src/lib/client/llmSetupApi.ts.
 const SaveLLMSettingsSchema = z.object({
-  provider: z.enum(["gemini", "openai", "ollama", "none"]).optional(),
+  provider: LLMProviderSchema.optional(),
   model: z.string().trim().min(1).max(120).optional(),
   timeoutMs: z.number().int().min(10_000).max(600_000).optional(),
   ollamaBaseUrl: z.string().trim().url().optional(),
   llmAssistedMatchReviewEnabled: z.boolean().optional(),
-  curatorPersona: z.enum(["razor", "archivist", "firestarter"]).optional()
+  curatorPersona: CuratorPersonaSchema.optional()
 });
 
 function localSettingsForPayload(input: z.infer<typeof SaveLLMSettingsSchema>): LocalLLMSettings {

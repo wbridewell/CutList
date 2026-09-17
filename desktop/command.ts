@@ -10,9 +10,10 @@ import {
   saveDesktopWorkspaceState,
   testDesktopLlmSetup
 } from "@/lib/desktop/backend";
-import type { DesktopError } from "@/lib/desktop/contracts";
+import type { DesktopBackendPayloadMap, DesktopBackendResultMap, DesktopError } from "@/lib/desktop/contracts";
 import { classifyBackendError } from "@/lib/desktop/errors";
 import { timeAsync } from "@/lib/debugTiming";
+import type { ExportResponse } from "@/types/playlist";
 
 type CommandEnvelope = {
   command: string;
@@ -34,8 +35,51 @@ type ErrorLine = {
   error: DesktopError;
 };
 
+// The commands this Node process serves. Everything else in desktopCommandNames is
+// handled natively by Rust and never reaches stdin here.
+type BackendCommand =
+  | "analyzePlaylist"
+  | "exportPlaylist"
+  | "getLlmSetup"
+  | "importChat"
+  | "planUserRequest"
+  | "playlistMessage"
+  | "saveLlmSetup"
+  | "saveWorkspaceState"
+  | "testLlmSetup"
+  | "verifyTracks";
+
+// Rust turns the raw export into a saved/cancelled result after the native dialog, so
+// the Node side of exportPlaylist returns the content itself, not DesktopExportResult.
+type BackendResult<K extends BackendCommand> = K extends "exportPlaylist" ? ExportResponse : DesktopBackendResultMap[K];
+
+type BackendHandlers = {
+  [K in BackendCommand]: (payload: DesktopBackendPayloadMap[K]) => BackendResult<K> | Promise<BackendResult<K>>;
+};
+
 function writeLine(line: ProgressLine | ResultLine | ErrorLine): void {
   process.stdout.write(`${JSON.stringify(line)}\n`);
+}
+
+const handlers: BackendHandlers = {
+  analyzePlaylist: (payload) => desktopAnalyzePlaylist(payload),
+  exportPlaylist: (payload) => desktopExportPlaylist(payload),
+  getLlmSetup: () => getDesktopLlmSetup(),
+  importChat: (payload) => desktopImportChat(payload),
+  planUserRequest: (payload) => desktopPlanUserRequest(payload),
+  playlistMessage: (payload) => desktopPlaylistMessage(payload, {
+    onProgress(event) {
+      writeLine({ type: "progress", event });
+    }
+  }),
+  saveLlmSetup: (payload) => saveDesktopLlmSetup(payload),
+  saveWorkspaceState: (payload) => saveDesktopWorkspaceState(payload?.state ?? null),
+  testLlmSetup: (payload) => testDesktopLlmSetup(payload),
+  verifyTracks: (payload) => desktopVerifyTracks(payload)
+};
+
+function isBackendCommand(name: string): name is BackendCommand {
+  return name in handlers;
 }
 
 function logCommandDebugError(command: string, error: unknown): void {
@@ -60,52 +104,15 @@ async function main(): Promise<void> {
   });
 
   const envelope = JSON.parse(raw) as CommandEnvelope;
-  const timed = <T>(operation: () => T | Promise<T>) => timeAsync("backend_command", operation, { command: envelope.command });
   try {
-    switch (envelope.command) {
-      case "getLlmSetup":
-        writeLine({ type: "result", data: await timed(() => getDesktopLlmSetup()) });
-        return;
-      case "saveLlmSetup":
-        writeLine({ type: "result", data: await timed(() => saveDesktopLlmSetup(envelope.payload as never)) });
-        return;
-      case "testLlmSetup":
-        writeLine({ type: "result", data: await timed(() => testDesktopLlmSetup(envelope.payload as never)) });
-        return;
-      case "saveWorkspaceState":
-        writeLine({
-          type: "result",
-          data: await timed(() => saveDesktopWorkspaceState((envelope.payload as { state?: unknown } | undefined)?.state as never))
-        });
-        return;
-      case "verifyTracks":
-        writeLine({ type: "result", data: await timed(() => desktopVerifyTracks(envelope.payload as never)) });
-        return;
-      case "importChat":
-        writeLine({ type: "result", data: await timed(() => desktopImportChat(envelope.payload as never)) });
-        return;
-      case "analyzePlaylist":
-        writeLine({ type: "result", data: await timed(() => desktopAnalyzePlaylist(envelope.payload as never)) });
-        return;
-      case "planUserRequest":
-        writeLine({ type: "result", data: await timed(() => desktopPlanUserRequest(envelope.payload as never)) });
-        return;
-      case "exportPlaylist":
-        writeLine({ type: "result", data: await timed(() => desktopExportPlaylist(envelope.payload as never)) });
-        return;
-      case "playlistMessage":
-        writeLine({
-          type: "result",
-          data: await timed(() => desktopPlaylistMessage(envelope.payload as never, {
-            onProgress(event) {
-              writeLine({ type: "progress", event });
-            }
-          }))
-        });
-        return;
-      default:
-        throw new Error(`Unknown desktop command: ${envelope.command}`);
+    if (!isBackendCommand(envelope.command)) {
+      throw new Error(`Unknown desktop command: ${envelope.command}`);
     }
+    // The payload is untrusted JSON from stdin. Every backend function validates it with
+    // Zod before use, so this is the single cast at the process boundary.
+    const handler = handlers[envelope.command] as (payload: unknown) => unknown;
+    const data = await timeAsync("backend_command", () => handler(envelope.payload), { command: envelope.command });
+    writeLine({ type: "result", data });
   } catch (error) {
     logCommandDebugError(envelope.command, error);
     throw error;

@@ -1,4 +1,6 @@
 import { MetadataProviderError, type MusicMetadataProvider, type TrackSearchQuery, type TrackSearchResult } from "@/lib/music/providers/providerTypes";
+import { metadataUserAgent } from "@/lib/appVersion";
+import { createMinIntervalThrottle, type RequestThrottle } from "@/lib/music/providers/requestThrottle";
 
 type MusicBrainzArtistCredit = {
   name?: string;
@@ -27,15 +29,21 @@ type MusicBrainzSearchResponse = {
 };
 
 const PROVIDER_TIMEOUT_MS = 8_000;
+// MusicBrainz allows roughly one request per second per client. The throttle is shared by
+// every provider instance in this process so a batch verification cannot exceed it:
+// https://musicbrainz.org/doc/MusicBrainz_API/Rate_Limiting
+const MUSICBRAINZ_MIN_INTERVAL_MS = 1_100;
+const sharedThrottle = createMinIntervalThrottle(MUSICBRAINZ_MIN_INTERVAL_MS);
 
-async function fetchWithTimeout(url: string): Promise<Response> {
+async function fetchWithTimeout(url: string, throttle: RequestThrottle): Promise<Response> {
+  await throttle.wait();
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), PROVIDER_TIMEOUT_MS);
   try {
     return await fetch(url, {
       headers: {
         accept: "application/json",
-        "user-agent": "CutList/0.1.5 (local development)"
+        "user-agent": metadataUserAgent()
       },
       signal: controller.signal
     });
@@ -92,6 +100,11 @@ function quoted(value: string): string {
 
 export class MusicBrainzProvider implements MusicMetadataProvider {
   name = "musicbrainz" as const;
+  private readonly throttle: RequestThrottle;
+
+  constructor(options: { throttle?: RequestThrottle } = {}) {
+    this.throttle = options.throttle ?? sharedThrottle;
+  }
 
   async searchTrack(query: TrackSearchQuery): Promise<TrackSearchResult[]> {
     const search = [`recording:${quoted(query.title)}`];
@@ -107,7 +120,7 @@ export class MusicBrainzProvider implements MusicMetadataProvider {
       fmt: "json",
       limit: "8"
     });
-    const response = await fetchWithTimeout(`https://musicbrainz.org/ws/2/recording?${params.toString()}`);
+    const response = await fetchWithTimeout(`https://musicbrainz.org/ws/2/recording?${params.toString()}`, this.throttle);
 
     if (!response.ok) {
       throw new MetadataProviderError("musicbrainz", `MusicBrainz verification failed with ${response.status}`, response.status);
@@ -122,7 +135,7 @@ export class MusicBrainzProvider implements MusicMetadataProvider {
       inc: "artist-credits+releases+tags+isrcs",
       fmt: "json"
     });
-    const response = await fetchWithTimeout(`https://musicbrainz.org/ws/2/recording/${encodeURIComponent(sourceId)}?${params.toString()}`);
+    const response = await fetchWithTimeout(`https://musicbrainz.org/ws/2/recording/${encodeURIComponent(sourceId)}?${params.toString()}`, this.throttle);
 
     if (!response.ok) {
       throw new MetadataProviderError("musicbrainz", `MusicBrainz lookup failed with ${response.status}`, response.status);

@@ -5,10 +5,15 @@ import { resolve } from "node:path";
 import { z } from "zod";
 import { writeFileAtomicSync } from "@/lib/desktop/atomicFile";
 
-export const LLMProviderSchema = z.enum(["ollama", "openai", "gemini", "none"]);
-export type LLMProvider = z.infer<typeof LLMProviderSchema>;
-export const CuratorPersonaSchema = z.enum(["razor", "archivist", "firestarter"]);
-export type CuratorPersona = z.infer<typeof CuratorPersonaSchema>;
+import {
+  CuratorPersonaSchema,
+  LLMProviderSchema,
+  type CuratorPersona,
+  type LLMProvider
+} from "@/lib/desktop/settingsSchemas";
+
+export { CuratorPersonaSchema, LLMProviderSchema };
+export type { CuratorPersona, LLMProvider };
 
 // Provider API keys are not stored here. They live in the OS keychain (see
 // src-tauri/src/secrets.rs) and reach this process only as GEMINI_API_KEY/OPENAI_API_KEY

@@ -309,7 +309,8 @@ describe("client workflows", () => {
           curatorTake: "The palette is clear enough to critique."
         }),
         sendMessage: async () => {
-          throw new Error("Network down.");
+          // The backend classifies provider failures before they reach the client.
+          throw new DesktopCommandError("provider_unreachable", "fetch failed");
         }
       }
     );
@@ -958,14 +959,17 @@ describe("errorMessageForWorkflow", () => {
     expect(message).toContain("Restart the app");
   });
 
-  it("falls back to the message-based ladder for an unknown-code DesktopCommandError", () => {
-    const message = errorMessageForWorkflow(new DesktopCommandError("unknown", "fetch failed"), "Request failed.");
-    expect(message).toContain("could not reach the provider");
+  it("shows the backend's own message for an unknown-code DesktopCommandError", () => {
+    const message = errorMessageForWorkflow(
+      new DesktopCommandError("unknown", "Ollama model \"granite4.1:8b\" is not available. Run \"ollama pull granite4.1:8b\"."),
+      "Request failed."
+    );
+    expect(message).toBe("Ollama model \"granite4.1:8b\" is not available. Run \"ollama pull granite4.1:8b\".");
   });
 
-  it("still matches the legacy message-based ladder for plain errors", () => {
-    const message = errorMessageForWorkflow(new Error("GEMINI_API_KEY is not set."), "Request failed.");
-    expect(message).toContain("LLM setup is incomplete");
+  it("shows a plain error's own message instead of re-classifying it client-side", () => {
+    const message = errorMessageForWorkflow(new Error("Desktop reveal path no longer exists."), "Request failed.");
+    expect(message).toBe("Desktop reveal path no longer exists.");
   });
 
   it("falls back to the fallback message for an unrecognized plain error", () => {

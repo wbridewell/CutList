@@ -1,8 +1,7 @@
 import { composeGenerationResponse, executeCandidateGeneration } from "@/lib/ai/services/candidateExecution";
-import { buildConstraintExecutionState, persistableConstraintsAfterRequest } from "@/lib/ai/services/constraintLifecycle";
-import { mergeConstraintLayers, normalizeInstructionIntentLayers } from "@/lib/ai/services/instructionIntent";
+import { mergeConstraintLayers } from "@/lib/ai/services/instructionIntent";
 import { executeRemovalPlan, selectReplacementTargets } from "@/lib/ai/services/removalPlanner";
-import { requestPlaylistShape, handlePlaylistShapeRequest } from "@/lib/ai/services/playlistShapeService";
+import { handlePlaylistShapeRequest } from "@/lib/ai/services/playlistShapeService";
 import { handleConversationalRequest, handlePastedTracks } from "@/lib/ai/services/specialHandlers";
 import { workflowSummaryPrompt } from "@/lib/ai/prompts";
 import { attemptLlmContract } from "@/lib/ai/services/llmService";

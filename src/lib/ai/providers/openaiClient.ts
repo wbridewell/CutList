@@ -2,13 +2,14 @@ import "server-only";
 import OpenAI from "openai";
 import { parseJsonResponse } from "@/lib/ai/jsonResponse";
 import { resolveLLMConfig, type EffectiveLLMConfig } from "@/lib/ai/llmConfig";
+import { LLMProviderNotConfiguredError } from "@/lib/ai/providerErrors";
 
 let client: OpenAI | null = null;
 let clientApiKey: string | null = null;
 
 export function getOpenAIClient(config: EffectiveLLMConfig = resolveLLMConfig()): OpenAI {
   if (!config.openaiApiKey) {
-    throw new Error("OPENAI_API_KEY is not configured.");
+    throw new LLMProviderNotConfiguredError("openai");
   }
 
   if (!client || clientApiKey !== config.openaiApiKey) {

@@ -158,7 +158,8 @@ fn replace_file_contents(path: &Path, content: &str) -> Result<(), String> {
     let parent = path
         .parent()
         .ok_or_else(|| "Desktop export path must have a parent directory.".to_string())?;
-    create_dir_all(parent).map_err(|error| format!("Failed to create export directory: {error}"))?;
+    create_dir_all(parent)
+        .map_err(|error| format!("Failed to create export directory: {error}"))?;
 
     let file_name = path
         .file_name()
@@ -179,6 +180,61 @@ pub(crate) fn project_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..")
 }
 
+// Minimal KEY=VALUE parser for .env.local: comments, blank lines, an optional `export `
+// prefix, and matching single or double quotes around the value. No interpolation.
+fn parse_dotenv(contents: &str) -> Vec<(String, String)> {
+    contents
+        .lines()
+        .filter_map(|line| {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                return None;
+            }
+            let line = line.strip_prefix("export ").unwrap_or(line).trim_start();
+            let (key, value) = line.split_once('=')?;
+            let key = key.trim();
+            let valid_key = !key.is_empty()
+                && key
+                    .chars()
+                    .all(|character| character.is_ascii_alphanumeric() || character == '_')
+                && !key.starts_with(|character: char| character.is_ascii_digit());
+            if !valid_key {
+                return None;
+            }
+            let value = value.trim();
+            let value = match (value.chars().next(), value.chars().last()) {
+                (Some('"'), Some('"')) | (Some('\''), Some('\'')) if value.len() >= 2 => {
+                    &value[1..value.len() - 1]
+                }
+                _ => value,
+            };
+            Some((key.to_string(), value.to_string()))
+        })
+        .collect()
+}
+
+// Development builds read .env.local from the project root so the documented LLM_* and
+// CUTLIST_* overrides reach the backend child. A variable already set to a non-blank
+// value in the shell that launched `npm run dev` wins, matching how Next treats the file.
+// Packaged builds never read it: testers configure everything through LLM setup.
+fn dev_env_overrides() -> Vec<(String, String)> {
+    let Ok(contents) = read_to_string(project_root().join(".env.local")) else {
+        return Vec::new();
+    };
+    parse_dotenv(&contents)
+}
+
+fn dotenv_entries_to_apply(
+    dotenv: &[(String, String)],
+    process_value: &dyn Fn(&str) -> Option<String>,
+) -> Vec<(String, String)> {
+    dotenv
+        .iter()
+        .filter(|(key, _)| process_value(key).is_none_or(|value| value.trim().is_empty()))
+        .cloned()
+        .collect()
+}
+
 fn dev_desktop_command_runner() -> Result<Command, String> {
     let root = project_root();
     let mut command = Command::new("node");
@@ -187,7 +243,10 @@ fn dev_desktop_command_runner() -> Result<Command, String> {
         .arg("desktop/command.ts")
         .current_dir(&root)
         .env("NODE_OPTIONS", "--conditions=react-server")
-        .env("CUTLIST_DESKTOP_DATA_DIR", root.join(".cutlist-desktop-data"));
+        .env(
+            "CUTLIST_DESKTOP_DATA_DIR",
+            root.join(".cutlist-desktop-data"),
+        );
     Ok(command)
 }
 
@@ -207,7 +266,9 @@ fn packaged_runtime_missing_error(detail: &str) -> String {
 
 fn packaged_runtime_paths(runtime_dir: &Path) -> (PathBuf, PathBuf) {
     (
-        runtime_dir.join("node").join(bundled_node_executable_name()),
+        runtime_dir
+            .join("node")
+            .join(bundled_node_executable_name()),
         runtime_dir.join("app").join("desktop").join("command.js"),
     )
 }
@@ -232,7 +293,9 @@ fn validate_packaged_runtime_dir(runtime_dir: &Path) -> Result<(), String> {
             .permissions()
             .mode();
         if mode & 0o111 == 0 {
-            return Err(packaged_runtime_missing_error("bundled Node runtime permissions"));
+            return Err(packaged_runtime_missing_error(
+                "bundled Node runtime permissions",
+            ));
         }
     }
 
@@ -278,7 +341,9 @@ fn local_llm_settings_path(app: &AppHandle) -> Result<PathBuf, String> {
     }
 
     if cfg!(debug_assertions) {
-        return Ok(project_root().join(".cutlist-desktop-data").join(".cutlist.local-settings.json"));
+        return Ok(project_root()
+            .join(".cutlist-desktop-data")
+            .join(".cutlist.local-settings.json"));
     }
 
     Ok(app
@@ -286,6 +351,32 @@ fn local_llm_settings_path(app: &AppHandle) -> Result<PathBuf, String> {
         .app_data_dir()
         .map_err(|error| format!("Failed to resolve app data directory: {error}"))?
         .join(".cutlist.local-settings.json"))
+}
+
+const PLAINTEXT_PROVIDER_KEY_FIELDS: [(&str, &str); 2] =
+    [("gemini", "geminiApiKey"), ("openai", "openaiApiKey")];
+
+// Removes plaintext provider keys from a parsed settings object once `store` has taken
+// ownership of them. `store` must return true only after the secret can be read back, so
+// a key is never deleted from the file while the keychain is unable to return it; a blank
+// value is simply dropped. Returns true when the object changed.
+fn strip_plaintext_provider_keys(
+    object: &mut serde_json::Map<String, Value>,
+    store: &mut dyn FnMut(&str, &str) -> bool,
+) -> bool {
+    let mut changed = false;
+    for (provider, field) in PLAINTEXT_PROVIDER_KEY_FIELDS {
+        let secret = match object.get(field) {
+            Some(Value::String(secret)) => secret.clone(),
+            _ => continue,
+        };
+        if !secret.trim().is_empty() && !store(provider, &secret) {
+            continue;
+        }
+        object.remove(field);
+        changed = true;
+    }
+    changed
 }
 
 // One-time, idempotent: moves any plaintext provider API keys already sitting in the
@@ -306,19 +397,8 @@ fn migrate_plaintext_provider_keys_to_keychain(app: &AppHandle) {
         return;
     };
 
-    let mut changed = false;
-    for (provider, field) in [("gemini", "geminiApiKey"), ("openai", "openaiApiKey")] {
-        let Some(Value::String(secret)) = object.get(field) else {
-            continue;
-        };
-        if !secret.trim().is_empty() {
-            if secrets::set_provider_secret(provider, secret).is_err() {
-                continue;
-            }
-        }
-        object.remove(field);
-        changed = true;
-    }
+    let changed =
+        strip_plaintext_provider_keys(object, &mut secrets::store_provider_secret_verified);
 
     if changed {
         if let Ok(serialized) = serde_json::to_string_pretty(&value) {
@@ -341,7 +421,10 @@ fn should_inject_keychain_secret(inherited_env_value: Option<&str>) -> bool {
 // "keychain" apart from a real OS environment variable override even though both arrive
 // through the same underlying env var. This is the only place a stored secret is ever
 // read back out of the keychain; it never crosses into the webview.
-fn inject_keychain_secrets(command: &mut Command) {
+fn inject_keychain_secrets(
+    command: &mut Command,
+    inherited_value: &dyn Fn(&str) -> Option<String>,
+) {
     for provider in secrets::KEYCHAIN_PROVIDERS {
         let (Some(env_var), Some(marker)) = (
             secrets::env_var_name_for(provider),
@@ -349,7 +432,7 @@ fn inject_keychain_secrets(command: &mut Command) {
         ) else {
             continue;
         };
-        if !should_inject_keychain_secret(std::env::var(env_var).ok().as_deref()) {
+        if !should_inject_keychain_secret(inherited_value(env_var).as_deref()) {
             continue;
         }
         if let Some(secret) = secrets::get_provider_secret(provider) {
@@ -370,7 +453,11 @@ fn desktop_command_runner(app: &AppHandle) -> Result<Command, String> {
         create_dir_all(&app_data_dir)
             .map_err(|error| format!("Failed to create app data directory: {error}"))?;
 
-        let mut command = Command::new(runtime_dir.join("node").join(bundled_node_executable_name()));
+        let mut command = Command::new(
+            runtime_dir
+                .join("node")
+                .join(bundled_node_executable_name()),
+        );
         command
             .arg(runtime_dir.join("app").join("desktop").join("command.js"))
             .current_dir(runtime_dir.join("app"))
@@ -379,7 +466,33 @@ fn desktop_command_runner(app: &AppHandle) -> Result<Command, String> {
         command
     };
 
-    inject_keychain_secrets(&mut command);
+    let dotenv = if cfg!(debug_assertions) {
+        dotenv_entries_to_apply(&dev_env_overrides(), &|key| std::env::var(key).ok())
+    } else {
+        Vec::new()
+    };
+    for (key, value) in &dotenv {
+        command.env(key, value);
+    }
+    // A key from the shell or .env.local counts as a genuine override, so the keychain
+    // value is only injected when neither supplies one.
+    inject_keychain_secrets(&mut command, &|name| {
+        std::env::var(name)
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .or_else(|| {
+                dotenv
+                    .iter()
+                    .find(|(key, _)| key == name)
+                    .map(|(_, value)| value.clone())
+            })
+    });
+    // tauri.conf.json reads the version from package.json; passing it down means the
+    // backend (MusicBrainz User-Agent, for one) can never carry a stale hardcoded copy.
+    command.env(
+        "CUTLIST_APP_VERSION",
+        app.package_info().version.to_string(),
+    );
     Ok(command)
 }
 
@@ -390,8 +503,8 @@ fn spawn_backend_command(
     timing_id: &str,
     envelope: &CommandEnvelope,
 ) -> Result<(Arc<Mutex<Child>>, ChildStdout), DesktopError> {
-    let mut command =
-        desktop_command_runner(app).map_err(|message| DesktopError::new("runtime_missing", message))?;
+    let mut command = desktop_command_runner(app)
+        .map_err(|message| DesktopError::new("runtime_missing", message))?;
     command
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -400,26 +513,33 @@ fn spawn_backend_command(
 
     let started_at = Instant::now();
     let mut child = command.spawn().map_err(|error| {
-        DesktopError::new("spawn_failed", format!("Failed to start desktop backend: {error}"))
+        DesktopError::new(
+            "spawn_failed",
+            format!("Failed to start desktop backend: {error}"),
+        )
     })?;
 
     {
-        let mut stdin = child
-            .stdin
-            .take()
-            .ok_or_else(|| DesktopError::new("spawn_failed", "Desktop backend stdin is unavailable."))?;
+        let mut stdin = child.stdin.take().ok_or_else(|| {
+            DesktopError::new("spawn_failed", "Desktop backend stdin is unavailable.")
+        })?;
         let body = serde_json::to_vec(envelope).map_err(|error| {
-            DesktopError::new("spawn_failed", format!("Failed to encode desktop command: {error}"))
+            DesktopError::new(
+                "spawn_failed",
+                format!("Failed to encode desktop command: {error}"),
+            )
         })?;
         stdin.write_all(&body).map_err(|error| {
-            DesktopError::new("spawn_failed", format!("Failed to send desktop command: {error}"))
+            DesktopError::new(
+                "spawn_failed",
+                format!("Failed to send desktop command: {error}"),
+            )
         })?;
     }
 
-    let stdout = child
-        .stdout
-        .take()
-        .ok_or_else(|| DesktopError::new("spawn_failed", "Desktop backend stdout is unavailable."))?;
+    let stdout = child.stdout.take().ok_or_else(|| {
+        DesktopError::new("spawn_failed", "Desktop backend stdout is unavailable.")
+    })?;
 
     // A packaged .app launched from Finder has nowhere for inherited stderr to go, so we
     // pump it into the app-data log file instead. In dev builds we also echo it to the
@@ -476,14 +596,25 @@ fn run_backend_command(
 
         for line in reader.lines() {
             let line = line.map_err(|error| {
-                DesktopError::new("backend_protocol", format!("Failed reading desktop backend output: {error}"))
+                DesktopError::new(
+                    "backend_protocol",
+                    format!("Failed reading desktop backend output: {error}"),
+                )
             })?;
             if !saw_backend_line {
                 saw_backend_line = true;
-                log_timing("process_first_output", &envelope.command, &timing_id, started_at);
+                log_timing(
+                    "process_first_output",
+                    &envelope.command,
+                    &timing_id,
+                    started_at,
+                );
             }
             let parsed: BackendLine = serde_json::from_str(&line).map_err(|error| {
-                DesktopError::new("backend_protocol", format!("Failed to parse desktop backend output: {error}"))
+                DesktopError::new(
+                    "backend_protocol",
+                    format!("Failed to parse desktop backend output: {error}"),
+                )
             })?;
             match parsed {
                 BackendLine::Progress { event } => {
@@ -508,10 +639,15 @@ fn run_backend_command(
 
         let status = child
             .lock()
-            .map_err(|_| DesktopError::new("spawn_failed", "Desktop backend process is unavailable."))?
+            .map_err(|_| {
+                DesktopError::new("spawn_failed", "Desktop backend process is unavailable.")
+            })?
             .wait()
             .map_err(|error| {
-                DesktopError::new("spawn_failed", format!("Failed waiting on desktop backend: {error}"))
+                DesktopError::new(
+                    "spawn_failed",
+                    format!("Failed waiting on desktop backend: {error}"),
+                )
             })?;
 
         let was_cancelled = request_id
@@ -530,10 +666,20 @@ fn run_backend_command(
             ));
         }
 
-        final_result.ok_or_else(|| DesktopError::new("backend_protocol", "Desktop backend did not return a result."))
+        final_result.ok_or_else(|| {
+            DesktopError::new(
+                "backend_protocol",
+                "Desktop backend did not return a result.",
+            )
+        })
     })();
 
-    log_timing("command_roundtrip", &envelope.command, &timing_id, started_at);
+    log_timing(
+        "command_roundtrip",
+        &envelope.command,
+        &timing_id,
+        started_at,
+    );
     let outcome = match &result {
         Ok(_) => "ok".to_string(),
         Err(error) => format!("error: {error}"),
@@ -570,7 +716,12 @@ async fn desktop_playlist_message(
         )
     })
     .await
-    .map_err(|error| DesktopError::new("spawn_failed", format!("Desktop backend task failed: {error}")))?
+    .map_err(|error| {
+        DesktopError::new(
+            "spawn_failed",
+            format!("Desktop backend task failed: {error}"),
+        )
+    })?
 }
 
 #[tauri::command]
@@ -611,11 +762,16 @@ fn desktop_export_playlist_impl(
 ) -> Result<Value, DesktopError> {
     let timing_id = next_timing_id();
     let started_at = Instant::now();
-    let payload_value =
-        payload.ok_or_else(|| DesktopError::new("invalid_payload", "Desktop export payload is missing."))?;
-    let export_request: DesktopExportPayload = serde_json::from_value(payload_value.clone()).map_err(|error| {
-        DesktopError::new("invalid_payload", format!("Failed to parse desktop export payload: {error}"))
+    let payload_value = payload.ok_or_else(|| {
+        DesktopError::new("invalid_payload", "Desktop export payload is missing.")
     })?;
+    let export_request: DesktopExportPayload = serde_json::from_value(payload_value.clone())
+        .map_err(|error| {
+            DesktopError::new(
+                "invalid_payload",
+                format!("Failed to parse desktop export payload: {error}"),
+            )
+        })?;
     let export_response = serde_json::from_value::<BackendExportResponse>(run_backend_command(
         app,
         state,
@@ -626,7 +782,10 @@ fn desktop_export_playlist_impl(
         },
     )?)
     .map_err(|error| {
-        DesktopError::new("backend_protocol", format!("Failed to parse desktop export response: {error}"))
+        DesktopError::new(
+            "backend_protocol",
+            format!("Failed to parse desktop export response: {error}"),
+        )
     })?;
 
     let dialog_started = Instant::now();
@@ -641,23 +800,49 @@ fn desktop_export_playlist_impl(
         let _ = sender.send(path);
     });
     let selected_path = receiver.recv().map_err(|error| {
-        DesktopError::new("export_failed", format!("Failed waiting for desktop save dialog: {error}"))
+        DesktopError::new(
+            "export_failed",
+            format!("Failed waiting for desktop save dialog: {error}"),
+        )
     })?;
-    log_timing("desktop_export_dialog", "exportPlaylist", &timing_id, dialog_started);
+    log_timing(
+        "desktop_export_dialog",
+        "exportPlaylist",
+        &timing_id,
+        dialog_started,
+    );
 
     let Some(selected_path) = selected_path else {
-        log_timing("command_roundtrip", "exportPlaylist", &timing_id, started_at);
+        log_timing(
+            "command_roundtrip",
+            "exportPlaylist",
+            &timing_id,
+            started_at,
+        );
         return Ok(json!({ "status": "cancelled" }));
     };
 
     let path = selected_path.into_path().map_err(|_| {
-        DesktopError::new("export_failed", "Desktop save dialog returned a non-local path.")
+        DesktopError::new(
+            "export_failed",
+            "Desktop save dialog returned a non-local path.",
+        )
     })?;
     let save_started = Instant::now();
     replace_file_contents(&path, &export_response.content)
         .map_err(|message| DesktopError::new("export_failed", message))?;
-    log_timing("desktop_export_save", "exportPlaylist", &timing_id, save_started);
-    log_timing("command_roundtrip", "exportPlaylist", &timing_id, started_at);
+    log_timing(
+        "desktop_export_save",
+        "exportPlaylist",
+        &timing_id,
+        save_started,
+    );
+    log_timing(
+        "command_roundtrip",
+        "exportPlaylist",
+        &timing_id,
+        started_at,
+    );
     Ok(json!({
         "status": "saved",
         "filename": export_response.filename,
@@ -678,7 +863,9 @@ fn desktop_workspace_state_path(app: &AppHandle) -> Result<PathBuf, String> {
     }
 
     if cfg!(debug_assertions) {
-        return Ok(project_root().join(".cutlist-desktop-data").join("workspace-state.json"));
+        return Ok(project_root()
+            .join(".cutlist-desktop-data")
+            .join("workspace-state.json"));
     }
 
     Ok(app
@@ -719,6 +906,82 @@ fn desktop_reveal_in_file_manager(path: String) -> Result<Value, String> {
         .spawn()
         .map_err(|error| format!("Failed to reveal exported file: {error}"))?;
 
+    Ok(json!({ "ok": true }))
+}
+
+// The webview deliberately has no opener plugin: `window.open` on an external URL is
+// either swallowed by the CSP or navigates the app away. This command opens only the
+// project's own GitHub pages in the system browser, which is narrower than a general
+// opener and keeps the capability file unchanged.
+const EXTERNAL_URL_ALLOWED_PREFIXES: [&str; 1] = ["https://github.com/wbridewell/CutList"];
+
+fn validate_external_url(url: &str) -> Result<(), String> {
+    let safe_chars = url.chars().all(|character| {
+        character.is_ascii_alphanumeric() || "-._~:/?#[]@!$'()*+,;=%".contains(character)
+    });
+    if url.is_empty() || !safe_chars {
+        return Err("External URL contains characters that are not allowed.".to_string());
+    }
+    let allowed = EXTERNAL_URL_ALLOWED_PREFIXES.iter().any(|prefix| {
+        url == *prefix
+            || url.strip_prefix(prefix).is_some_and(|rest| {
+                rest.starts_with('/') || rest.starts_with('#') || rest.starts_with('?')
+            })
+    });
+    if allowed {
+        Ok(())
+    } else {
+        Err("External URL is not on the allowlist.".to_string())
+    }
+}
+
+#[tauri::command]
+fn desktop_open_external_url(url: String) -> Result<Value, String> {
+    validate_external_url(&url)?;
+    let mut command = if cfg!(target_os = "macos") {
+        let mut command = Command::new("open");
+        command.arg(&url);
+        command
+    } else if cfg!(target_os = "windows") {
+        let mut command = Command::new("cmd");
+        command.args(["/C", "start", "", &url]);
+        command
+    } else {
+        let mut command = Command::new("xdg-open");
+        command.arg(&url);
+        command
+    };
+    let status = command
+        .status()
+        .map_err(|error| format!("Failed to open the link in the system browser: {error}"))?;
+    if !status.success() {
+        return Err("The system browser could not open the link.".to_string());
+    }
+    Ok(json!({ "ok": true }))
+}
+
+#[tauri::command]
+fn desktop_toggle_devtools(window: tauri::WebviewWindow) -> Result<Value, String> {
+    #[cfg(debug_assertions)]
+    {
+        if window.is_devtools_open() {
+            window.close_devtools();
+        } else {
+            window.open_devtools();
+        }
+        Ok(json!({ "ok": true }))
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        let _ = window;
+        Err("Developer tools are only available in development builds.".to_string())
+    }
+}
+
+// Replaces the predefined Quit menu item so the webview can flush autosave before exit.
+#[tauri::command]
+fn desktop_quit(app: AppHandle) -> Result<Value, String> {
+    app.exit(0);
     Ok(json!({ "ok": true }))
 }
 
@@ -827,7 +1090,12 @@ macro_rules! desktop_value_command {
                 )
             })
             .await
-            .map_err(|error| DesktopError::new("spawn_failed", format!("Desktop backend task failed: {error}")))?
+            .map_err(|error| {
+                DesktopError::new(
+                    "spawn_failed",
+                    format!("Desktop backend task failed: {error}"),
+                )
+            })?
         }
     };
 }
@@ -848,9 +1116,16 @@ async fn desktop_export_playlist(
     payload: Option<Value>,
 ) -> Result<Value, DesktopError> {
     let state = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || desktop_export_playlist_impl(&app, &state, payload))
-        .await
-        .map_err(|error| DesktopError::new("spawn_failed", format!("Desktop backend task failed: {error}")))?
+    tauri::async_runtime::spawn_blocking(move || {
+        desktop_export_playlist_impl(&app, &state, payload)
+    })
+    .await
+    .map_err(|error| {
+        DesktopError::new(
+            "spawn_failed",
+            format!("Desktop backend task failed: {error}"),
+        )
+    })?
 }
 
 fn main() {
@@ -875,14 +1150,17 @@ fn main() {
             desktop_get_log_path,
             desktop_get_workspace_state,
             desktop_import_chat,
+            desktop_open_external_url,
             desktop_plan_user_request,
             desktop_playlist_message,
             desktop_quarantine_workspace_state,
+            desktop_quit,
             desktop_reveal_in_file_manager,
             desktop_save_llm_setup,
             desktop_save_workspace_state,
             desktop_set_provider_secret,
             desktop_test_llm_setup,
+            desktop_toggle_devtools,
             desktop_verify_tracks
         ])
         .run(tauri::generate_context!())
@@ -894,14 +1172,159 @@ mod tests {
     use super::{
         desktop_export_filter, desktop_export_filters, packaged_runtime_missing_error,
         quarantine_workspace_file, replace_file_contents, should_inject_keychain_secret,
-        validate_keychain_provider, validate_packaged_runtime_dir, BackendErrorPayload,
-        DesktopError,
+        strip_plaintext_provider_keys, validate_keychain_provider, validate_packaged_runtime_dir,
+        BackendErrorPayload, DesktopError,
     };
+    use serde_json::json;
     use std::{
         fs::{create_dir_all, read_to_string, remove_dir_all, write},
         path::Path,
         time::{SystemTime, UNIX_EPOCH},
     };
+
+    fn settings_object(value: serde_json::Value) -> serde_json::Map<String, serde_json::Value> {
+        value.as_object().cloned().unwrap()
+    }
+
+    #[test]
+    fn migration_strips_plaintext_keys_only_after_the_store_reads_them_back() {
+        let mut object = settings_object(json!({
+            "provider": "gemini",
+            "geminiApiKey": "AIza-migrate-me",
+            "openaiApiKey": "sk-migrate-me"
+        }));
+        let mut stored = Vec::new();
+
+        let changed = strip_plaintext_provider_keys(&mut object, &mut |provider, secret| {
+            stored.push((provider.to_string(), secret.to_string()));
+            true
+        });
+
+        assert!(changed);
+        assert!(!object.contains_key("geminiApiKey"));
+        assert!(!object.contains_key("openaiApiKey"));
+        assert_eq!(object["provider"], "gemini");
+        assert_eq!(
+            stored,
+            vec![
+                ("gemini".to_string(), "AIza-migrate-me".to_string()),
+                ("openai".to_string(), "sk-migrate-me".to_string())
+            ]
+        );
+    }
+
+    #[test]
+    fn migration_keeps_the_plaintext_key_when_the_store_cannot_read_it_back() {
+        let mut object = settings_object(json!({ "geminiApiKey": "AIza-keep-me" }));
+
+        let changed = strip_plaintext_provider_keys(&mut object, &mut |_, _| false);
+
+        assert!(!changed);
+        assert_eq!(object["geminiApiKey"], "AIza-keep-me");
+    }
+
+    #[test]
+    fn migration_drops_blank_plaintext_keys_without_storing_them() {
+        let mut object = settings_object(json!({ "openaiApiKey": "   " }));
+        let mut store_calls = 0;
+
+        let changed = strip_plaintext_provider_keys(&mut object, &mut |_, _| {
+            store_calls += 1;
+            true
+        });
+
+        assert!(changed);
+        assert_eq!(store_calls, 0);
+        assert!(!object.contains_key("openaiApiKey"));
+    }
+
+    // tauri.conf.json takes its version from package.json, but Cargo.toml still carries its
+    // own copy. Keep them equal so `cargo --version`-style metadata and the bundle agree.
+    #[test]
+    fn cargo_package_version_matches_package_json() {
+        let package_json: serde_json::Value =
+            serde_json::from_str(include_str!("../../package.json")).unwrap();
+        assert_eq!(
+            package_json["version"],
+            env!("CARGO_PKG_VERSION"),
+            "src-tauri/Cargo.toml version must match package.json"
+        );
+    }
+
+    #[test]
+    fn external_url_allowlist_accepts_the_help_and_issue_links() {
+        assert!(
+            super::validate_external_url("https://github.com/wbridewell/CutList#readme").is_ok()
+        );
+        assert!(
+            super::validate_external_url("https://github.com/wbridewell/CutList/issues/new")
+                .is_ok()
+        );
+        assert!(super::validate_external_url("https://github.com/wbridewell/CutList").is_ok());
+    }
+
+    #[test]
+    fn external_url_allowlist_rejects_other_destinations() {
+        for url in [
+            "http://github.com/wbridewell/CutList",
+            "https://github.com/wbridewell/CutList.evil/x",
+            "https://github.com/wbridewell/CutListing",
+            "https://github.com/someone-else/CutList",
+            "https://example.com/?next=https://github.com/wbridewell/CutList",
+            "javascript:alert(1)",
+            "https://github.com/wbridewell/CutList/issues new",
+            "https://github.com/wbridewell/CutList/issues?a=1&b=2",
+            "",
+        ] {
+            assert!(
+                super::validate_external_url(url).is_err(),
+                "should reject {url:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn dotenv_parser_handles_comments_quotes_and_export_prefix() {
+        let parsed = super::parse_dotenv(
+            "# comment\n\nLLM_PROVIDER=ollama\nexport OLLAMA_MODEL=\"granite4.1:8b\"\nLLM_TIMEOUT_MS='180000'\nEMPTY=\nnot a pair\n9BAD=x\n",
+        );
+        assert_eq!(
+            parsed,
+            vec![
+                ("LLM_PROVIDER".to_string(), "ollama".to_string()),
+                ("OLLAMA_MODEL".to_string(), "granite4.1:8b".to_string()),
+                ("LLM_TIMEOUT_MS".to_string(), "180000".to_string()),
+                ("EMPTY".to_string(), String::new()),
+            ]
+        );
+    }
+
+    #[test]
+    fn dotenv_entries_do_not_override_a_non_blank_process_variable() {
+        let dotenv = vec![
+            ("LLM_PROVIDER".to_string(), "ollama".to_string()),
+            (
+                "GEMINI_MODEL".to_string(),
+                "gemini-2.5-flash-lite".to_string(),
+            ),
+            ("LLM_DEBUG_RAW".to_string(), "1".to_string()),
+        ];
+        let applied = super::dotenv_entries_to_apply(&dotenv, &|key| match key {
+            "LLM_PROVIDER" => Some("gemini".to_string()),
+            "GEMINI_MODEL" => Some("   ".to_string()),
+            _ => None,
+        });
+        assert_eq!(
+            applied,
+            vec![
+                (
+                    "GEMINI_MODEL".to_string(),
+                    "gemini-2.5-flash-lite".to_string()
+                ),
+                ("LLM_DEBUG_RAW".to_string(), "1".to_string()),
+            ]
+        );
+    }
 
     #[test]
     fn injects_keychain_secret_when_no_env_var_is_inherited() {
@@ -995,7 +1418,8 @@ mod tests {
 
     #[test]
     fn packaged_runtime_validation_rejects_missing_runtime_folder() {
-        let error = validate_packaged_runtime_dir(Path::new("/definitely/missing/cutlist-runtime")).unwrap_err();
+        let error = validate_packaged_runtime_dir(Path::new("/definitely/missing/cutlist-runtime"))
+            .unwrap_err();
         assert!(error.contains("runtime folder"));
         assert!(error.contains("Reinstall the app from the DMG"));
     }
@@ -1005,7 +1429,10 @@ mod tests {
     fn packaged_runtime_validation_rejects_missing_backend_files() {
         let runtime_dir = unique_temp_dir("cutlist-runtime-check");
         create_dir_all(runtime_dir.join("node")).unwrap();
-        write_executable(&runtime_dir.join("node").join("node"), "#!/bin/sh\nexit 0\n");
+        write_executable(
+            &runtime_dir.join("node").join("node"),
+            "#!/bin/sh\nexit 0\n",
+        );
 
         let error = validate_packaged_runtime_dir(&runtime_dir).unwrap_err();
         assert!(error.contains("desktop backend command"));
@@ -1027,7 +1454,9 @@ mod tests {
         assert!(quarantine_path
             .file_name()
             .and_then(|name| name.to_str())
-            .is_some_and(|name| name.starts_with("workspace-state.damaged-") && name.ends_with(".json")));
+            .is_some_and(
+                |name| name.starts_with("workspace-state.damaged-") && name.ends_with(".json")
+            ));
         assert_eq!(read_to_string(&quarantine_path).unwrap(), "not valid json");
 
         remove_dir_all(test_dir).unwrap();
@@ -1059,7 +1488,10 @@ mod tests {
     fn desktop_error_display_includes_code_and_message() {
         let error = DesktopError::new("spawn_failed", "Failed to start desktop backend.");
 
-        assert_eq!(error.to_string(), "Failed to start desktop backend. (spawn_failed)");
+        assert_eq!(
+            error.to_string(),
+            "Failed to start desktop backend. (spawn_failed)"
+        );
     }
 
     #[test]

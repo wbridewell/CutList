@@ -58,7 +58,7 @@ try {
     "-format", "UDZO",
     dmgPath
   ]);
-} catch (error) {
+} catch {
   throw new Error(
     `Built app bundle at ${appPath}, but DMG creation failed. Try the same command from a normal logged-in macOS session with Disk Utility access.`
   );

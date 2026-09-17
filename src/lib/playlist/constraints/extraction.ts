@@ -54,10 +54,6 @@ function defaultBpmTolerance(targetBpm: number): number {
   return targetBpm < 80 ? 4 : 5;
 }
 
-function unique(values: string[] = []): string[] {
-  return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
-}
-
 function isUsableGenreQuotaLabel(value: string): boolean {
   const normalized = value.toLowerCase().trim();
   return Boolean(normalized) &&

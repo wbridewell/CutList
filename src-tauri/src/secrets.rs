@@ -22,12 +22,23 @@ pub fn delete_provider_secret(provider: &str) -> Result<(), String> {
     match entry_for(provider)?.delete_credential() {
         Ok(()) => Ok(()),
         Err(keyring::Error::NoEntry) => Ok(()),
-        Err(error) => Err(format!("Failed to remove the key from the system keychain: {error}")),
+        Err(error) => Err(format!(
+            "Failed to remove the key from the system keychain: {error}"
+        )),
     }
 }
 
 pub fn get_provider_secret(provider: &str) -> Option<String> {
     entry_for(provider).ok()?.get_password().ok()
+}
+
+// Stores the secret and then reads it back through a fresh Entry. Callers that are about
+// to discard another copy of the secret (see the plaintext-settings migration in main.rs)
+// must use this instead of set_provider_secret so a backend that accepts writes but can't
+// return them, such as keyring's mock store, never causes the only copy to be deleted.
+pub fn store_provider_secret_verified(provider: &str, secret: &str) -> bool {
+    set_provider_secret(provider, secret).is_ok()
+        && get_provider_secret(provider).as_deref() == Some(secret)
 }
 
 // Environment variable names desktop_command_runner injects a keychain-stored secret
@@ -52,20 +63,36 @@ pub fn key_source_marker_for(provider: &str) -> Option<&'static str> {
 }
 
 // set_provider_secret/get_provider_secret/delete_provider_secret call the real OS
-// keychain and are intentionally not unit tested here: keyring's mock backend is
-// installed via a process-wide global (set_default_credential_builder), which would
-// leak into every other test in this binary. The lookup tables below are pure and
-// safe to test directly; the /keychain scenario is covered by the smoke test checklist
-// in docs/MACOS_DMG_ALPHA.md.
+// keychain and are intentionally not exercised here: keyring's mock backend is installed
+// via a process-wide global (set_default_credential_builder), which would leak into every
+// other test in this binary. What is tested is that the compiled default backend is the
+// platform store and not that mock, because keyring 3.x falls back to the mock whenever
+// the platform feature is missing from Cargo.toml and nothing else would notice. The
+// end-to-end path is the quit-and-relaunch step in RELEASE_CHECKLIST.md.
 #[cfg(test)]
 mod tests {
     use super::{env_var_name_for, key_source_marker_for, KEYCHAIN_PROVIDERS};
 
     #[test]
+    fn compiled_keyring_backend_is_the_platform_store_not_the_mock() {
+        let builder = keyring::default::default_credential_builder();
+        assert!(
+            builder.as_any().downcast_ref::<keyring::mock::MockCredentialBuilder>().is_none(),
+            "keyring resolved to its in-memory mock store; enable the platform feature (apple-native) in Cargo.toml"
+        );
+    }
+
+    #[test]
     fn every_keychain_provider_has_an_env_var_and_marker() {
         for provider in KEYCHAIN_PROVIDERS {
-            assert!(env_var_name_for(provider).is_some(), "missing env var mapping for {provider}");
-            assert!(key_source_marker_for(provider).is_some(), "missing marker mapping for {provider}");
+            assert!(
+                env_var_name_for(provider).is_some(),
+                "missing env var mapping for {provider}"
+            );
+            assert!(
+                key_source_marker_for(provider).is_some(),
+                "missing marker mapping for {provider}"
+            );
         }
     }
 

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
+import { JsonExtractionError } from "@/lib/ai/jsonResponse";
+import { LLMDisabledError, LLMTimeoutError } from "@/lib/ai/llmClient";
+import { LLMProviderNotConfiguredError } from "@/lib/ai/providerErrors";
 import { classifyBackendError } from "@/lib/desktop/errors";
 
 describe("classifyBackendError", () => {
@@ -16,6 +19,13 @@ describe("classifyBackendError", () => {
     const error = classifyBackendError(new DOMException("Request interrupted.", "AbortError"));
 
     expect(error.code).toBe("cancelled");
+  });
+
+  it("classifies the typed LLM errors without looking at their messages", () => {
+    expect(classifyBackendError(new LLMDisabledError()).code).toBe("llm_unconfigured");
+    expect(classifyBackendError(new LLMProviderNotConfiguredError("gemini")).code).toBe("llm_unconfigured");
+    expect(classifyBackendError(new LLMTimeoutError(5)).code).toBe("llm_timeout");
+    expect(classifyBackendError(new JsonExtractionError("bad", "{")).code).toBe("llm_malformed_response");
   });
 
   it("classifies missing provider configuration as llm_unconfigured", () => {

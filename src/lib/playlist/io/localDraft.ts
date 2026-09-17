@@ -16,12 +16,12 @@ export {
   type HistoryIssueStatus,
   type RequestHistoryEntry
 } from "@/lib/playlist/collaboration";
-import type { ChatMessage, HistoryIssueStatus, RequestHistoryEntry } from "@/lib/playlist/collaboration";
+import type { ChatMessage, RequestHistoryEntry } from "@/lib/playlist/collaboration";
+import { CuratorPersonaSchema, type CuratorPersona } from "@/lib/desktop/settingsSchemas";
 
 export const LOCAL_DRAFT_VERSION = 1;
 export const PERSISTED_WORKSPACE_STATE_VERSION = 1;
-const CuratorPersonaSchema = z.enum(["razor", "archivist", "firestarter"]);
-export type CuratorPersona = z.infer<typeof CuratorPersonaSchema>;
+export type { CuratorPersona };
 
 export type LocalDraftV1 = {
   version: typeof LOCAL_DRAFT_VERSION;

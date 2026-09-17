@@ -118,7 +118,7 @@ export function NaturalRequestForm({
   return (
     <div className="section form command-composer">
       <div className="composer-heading">
-        <img src="/cutlist_mascot_app.png" alt="" />
+        <img src="/cutlist_mascot_app.webp" alt="" />
         <div>
           <h2>Curator Console</h2>
           <p className="section-intro">{consoleIntro}</p>

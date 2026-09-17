@@ -41,8 +41,8 @@ This is not an account system, streaming-service uploader, Spotify/Apple Music O
 - Never expose OpenAI or other provider secrets to the webview UI.
 - Never add `NEXT_PUBLIC_` to server secrets.
 - Keep LLM and metadata provider calls in trusted server-only modules and desktop commands.
-- Validate request bodies with Zod before use.
-- Preserve request size limits and rate/concurrency guards.
+- Validate desktop command payloads with Zod before use.
+- Preserve payload size limits and the per-process LLM request guard.
 - Do not log API keys, authorization headers, raw provider responses, or large prompt histories.
 - Treat legacy `localStorage` drafts as migration-only data; native app-data storage is the supported persistence path.
 
@@ -60,7 +60,7 @@ This is not an account system, streaming-service uploader, Spotify/Apple Music O
 - Put frontend native-command logic in `src/lib/client`.
 - Use explicit TypeScript types and Zod schemas at boundaries.
 - Avoid new dependencies for trivial helpers.
-- Update tests when route contracts, schemas, constraints, or provider behavior changes.
+- Update tests when desktop command contracts, schemas, constraints, or provider behavior changes.
 
 ## Documentation Rules
 

@@ -20,6 +20,8 @@ Avoid:
 - Turning every panel title into terminal cosplay.
 - Decorative language that makes verification, constraints, or rejected matches harder to understand.
 
+Detailed tokens, layout, component, and copy rules live in [UI_DESIGN_SPEC.md](UI_DESIGN_SPEC.md).
+
 ## UI Structure
 
 - Playlist review is the primary surface.

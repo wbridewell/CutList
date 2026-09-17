@@ -4,7 +4,7 @@ import { mergeConstraintLayers } from "@/lib/ai/services/instructionIntent";
 import { resolveOperatorPlan } from "@/lib/ai/services/operatorPlanner";
 import { getJsonFromLLM, getLLMProvider } from "@/lib/ai/llmClient";
 import { verifyTrack, verifyTracks } from "@/lib/music/verifyTrack";
-import type { PlaylistState, Track } from "@/types/playlist";
+import type { PlaylistState, ResolvedOperatorPlan, Track } from "@/types/playlist";
 
 vi.mock("@/lib/ai/llmClient", () => ({
   getJsonFromLLM: vi.fn(async () => {
@@ -142,7 +142,8 @@ describe("curator LLM boundaries", () => {
         confidence: "high",
         planningNotes: ["Test planner stub."],
         instructionIntentStatus: "not_attempted"
-      } as any;
+        // A routing stub: only the fields handlePlaylistMessage reads are meaningful here.
+      } as unknown as ResolvedOperatorPlan;
     });
   });
 

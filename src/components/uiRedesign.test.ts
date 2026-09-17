@@ -803,7 +803,7 @@ describe("UI redesign behavior", () => {
     expect(composerHtml).toContain("Ways to start");
     expect(composerHtml).toContain("Describe playlist");
     expect(composerHtml).toContain("Describe the playlist you want.");
-    expect(composerHtml).toContain("cutlist_mascot_app.png");
+    expect(composerHtml).toContain("cutlist_mascot_app.webp");
     expect(composerHtml).toContain(">Build<");
     expect(composerHtml).toContain(">Seed<");
     expect(composerHtml).toContain(">Constrain<");

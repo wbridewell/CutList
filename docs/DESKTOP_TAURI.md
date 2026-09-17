@@ -18,10 +18,10 @@ Desktop development requires Node.js, npm, the Rust toolchain, and the Tauri pre
 
 ```bash
 npm install
-npm run tauri:dev
+npm run dev
 ```
 
-`npm run tauri:dev` starts the Next dev server through Tauri. The Rust shell invokes trusted desktop commands that run the existing TypeScript backend logic with the `react-server` condition so `server-only` markers still protect those modules from client imports.
+`npm run dev` starts the Next dev server through Tauri. The Rust shell invokes trusted desktop commands that run the existing TypeScript backend logic with the `react-server` condition so `server-only` markers still protect those modules from client imports.
 
 For packaged builds:
 
@@ -47,19 +47,19 @@ For local Ollama:
 
 ```bash
 ollama pull granite4.1:8b
-LLM_PROVIDER=ollama OLLAMA_MODEL=granite4.1:8b npm run tauri:dev
+LLM_PROVIDER=ollama OLLAMA_MODEL=granite4.1:8b npm run dev
 ```
 
 For OpenAI:
 
 ```bash
-LLM_PROVIDER=openai OPENAI_API_KEY=... npm run tauri:dev
+LLM_PROVIDER=openai OPENAI_API_KEY=... npm run dev
 ```
 
 For Gemini:
 
 ```bash
-LLM_PROVIDER=gemini GEMINI_API_KEY=... npm run tauri:dev
+LLM_PROVIDER=gemini GEMINI_API_KEY=... npm run dev
 ```
 
 If the UI reports that the desktop backend request failed, restart the app. If generation starts but the model fails, check the provider-specific model name, API key, quota, or local Ollama server.

@@ -18,7 +18,7 @@ There is no auth model. Do not add multi-user assumptions without explicit desig
 
 ## Secret Handling
 
-Secrets must stay out of client code, docs, logs, and committed files. Use `.env.local` locally and deployment secret stores in hosted environments.
+Secrets must stay out of client code, docs, logs, and committed files. Cloud provider keys live in the OS keychain through the in-app `LLM setup` dialog; shell environment variables and, in development builds, `.env.local` are debug overrides.
 
 ## Input Validation
 

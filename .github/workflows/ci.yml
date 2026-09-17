@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   verify:
-    name: Verify
+    name: Verify (TypeScript)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -20,7 +20,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: .node-version
           cache: npm
 
       - name: Install
@@ -37,3 +37,48 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  # The desktop shell is macOS-only in practice: keychain access, the reveal-in-Finder
+  # command, and the DMG packaging all assume it. Running the Rust checks on macOS is what
+  # catches a keyring build that silently falls back to the in-memory mock store.
+  rust:
+    name: Verify (Rust shell, macOS)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      # tauri::generate_context! embeds frontendDist at compile time, so the static export
+      # has to exist before cargo can build the crate at all.
+      - name: Install and build frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Format
+        run: cargo fmt --check
+        working-directory: src-tauri
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+        working-directory: src-tauri
+
+      - name: Test
+        run: cargo test
+        working-directory: src-tauri

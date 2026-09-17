@@ -46,6 +46,8 @@ This starts the already-configured local alpha without reinstalling dependencies
 
 ## Environment
 
+Development builds read `.env.local` from the project root and pass it to the trusted backend; a variable already exported in the shell that launched `npm run dev` wins. Packaged builds ignore `.env.local` and use the in-app `LLM setup` dialog plus the OS keychain. The in-app dialog is the normal path even in development; the file is for debug overrides such as `LLM_DEBUG_RAW` and `CUTLIST_DEBUG_TIMING`.
+
 Use `LLM_PROVIDER=none` for deterministic work that should not call an LLM.
 
 Use `LLM_PROVIDER=ollama` for local LLM work.
@@ -72,7 +74,7 @@ Curator personality is now selected in-app from `Curator persona` next to `LLM s
 - `npm run prompt:harness`: run live playlist-generation prompt evals against the configured LLM provider.
 - `npm run eval:cross-cutting`: run the dated cross-workflow evaluation pack for generation, review, replace, compression, and discovery-radius comparisons.
 - `npm run typecheck`: run TypeScript checks.
-- `npm run lint`: currently aliases type checking.
+- `npm run lint`: run ESLint.
 - `npm run build`: build the static frontend used by the desktop app.
 - `npm run build:desktop-runtime`: stage the compiled trusted backend runtime.
 - `npm run build:dmg`: build the macOS DMG release artifact. This is release packaging, not the normal development build. It uses the bundled portable Node when available; set `CUTLIST_NODE_RUNTIME_PATH` only to override it.

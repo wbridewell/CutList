@@ -4,6 +4,9 @@ const isTauriBuild = process.env.TAURI_BUILD === "1";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // Development-only pages under src/app/dev are named page.dev.tsx. The desktop export
+  // drops that extension so they never reach the bundle; the Next dev server keeps them.
+  pageExtensions: isTauriBuild ? ["tsx", "ts"] : ["dev.tsx", "tsx", "ts"],
   ...(isTauriBuild
     ? {
         output: "export",

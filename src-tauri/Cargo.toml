@@ -9,7 +9,9 @@ edition = "2021"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-keyring = "3"
+# keyring 3.x ships with no platform backend enabled; without `apple-native` it silently
+# compiles the in-memory mock store and every "saved" key vanishes on the next Entry.
+keyring = { version = "3", features = ["apple-native"] }
 regex = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

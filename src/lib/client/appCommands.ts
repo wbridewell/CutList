@@ -5,11 +5,11 @@ import type { PlaylistExportFormat } from "@/lib/playlist/io/exportFormats";
 
 export const appCommandIds = {
   changeOutputDestination: "file.changeOutputDestination",
-  commandPalette: "view.commandPalette",
   exportPlaylist: "file.exportPlaylist",
   importChat: "file.importChat",
   newWorkspace: "file.newWorkspace",
   openWorkspace: "file.openWorkspace",
+  quit: "app.quit",
   revealOutput: "file.revealOutput",
   saveWorkspace: "file.saveWorkspace",
   saveWorkspaceAs: "file.saveWorkspaceAs",
@@ -59,8 +59,6 @@ export function labelForCommand(commandId: AppCommandId): string {
   switch (commandId) {
     case appCommandIds.changeOutputDestination:
       return "Change Output Destination...";
-    case appCommandIds.commandPalette:
-      return "Command Palette...";
     case appCommandIds.exportPlaylist:
       return "Export Playlist...";
     case appCommandIds.importChat:
@@ -69,6 +67,8 @@ export function labelForCommand(commandId: AppCommandId): string {
       return "New Workspace";
     case appCommandIds.openWorkspace:
       return "Open Workspace...";
+    case appCommandIds.quit:
+      return "Quit CutList";
     case appCommandIds.revealOutput:
       switch (currentPlatform()) {
         case "macos":

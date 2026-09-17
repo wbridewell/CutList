@@ -183,23 +183,14 @@ export function errorMessageForWorkflow(error: unknown, fallbackMessage: string)
   if (error instanceof Error && error.name === "AbortError") {
     return "Stopped.";
   }
+  // Classification happens once, in the backend (classifyBackendError); a code with no
+  // canned message and any other Error show their own text, which for the Ollama
+  // errors and RequestResolutionError is already the remediation the user needs.
   if (error instanceof DesktopCommandError) {
     const codeMessage = messageForDesktopErrorCode(error.code);
     if (codeMessage) {
       return codeMessage;
     }
-  }
-  if (/GEMINI_API_KEY|OPENAI_API_KEY|LLM provider is disabled|Gemini is not configured|OpenAI is unavailable|local LLM provider is unavailable/i.test(message)) {
-    return "LLM setup is incomplete or unavailable. Open LLM setup in the top-right, choose a provider, save it, and run Save and test. Your playlist is unchanged.";
-  }
-  if (/timed out|timeout/i.test(message)) {
-    return "The model took too long to respond. Your playlist is unchanged. Try again or raise the timeout in LLM setup.";
-  }
-  if (/Could not recover a single valid JSON object or array|Model returned an empty JSON response|returned an empty response|thinking output without a JSON response/i.test(message)) {
-    return "The model returned something CutList could not safely use. Your playlist is unchanged. Try again.";
-  }
-  if (/fetch failed|network|ECONNREFUSED|ENOTFOUND|Failed to fetch|request failed|unavailable/i.test(message)) {
-    return "CutList could not reach the provider. Check your internet connection or local Ollama server, then try again. Your playlist is unchanged.";
   }
   if (error instanceof Error && message.trim()) {
     return message;

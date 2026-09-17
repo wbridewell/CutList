@@ -171,7 +171,7 @@ export function IssuesSection({
   const visibleItems = useMemo(() => (
     hasExplicitFilterSelection && activeFilter !== "all" ? filteredItems : inboxItems
   ), [activeFilter, filteredItems, hasExplicitFilterSelection, inboxItems]);
-  const visibleKinds = new Set(inboxItems.map((item) => item.filter));
+  const visibleKinds = useMemo(() => new Set(inboxItems.map((item) => item.filter)), [inboxItems]);
   const reviewContextBySuggestionId = useMemo(() => {
     const result = new Map<string, string[]>();
     for (const item of inboxItems) {

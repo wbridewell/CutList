@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { getDesktopWorkspaceState, quarantineDesktopWorkspaceState, saveDesktopWorkspaceState } from "@/lib/client/workspaceStateApi";
 import type { DesktopWorkspaceStateReadResult } from "@/lib/desktop/contracts";
@@ -25,6 +25,8 @@ type LocalPlaylistDraftState = {
   setMessages: Dispatch<SetStateAction<ChatMessage[]>>;
   setPlaylist: (playlist: PlaylistState) => void;
   workspaceRecoveryNotice: string | null;
+  autosaveError: string | null;
+  flushPendingSave: () => Promise<void>;
 };
 
 type LocalPlaylistDraftOptions = {
@@ -37,6 +39,17 @@ type LocalPlaylistDraftOptions = {
 const emptyInitialHistory: RequestHistoryEntry[] = [];
 const DESKTOP_RESTORE_ATTEMPTS = 5;
 const DESKTOP_RESTORE_DELAY_MS = 250;
+const AUTOSAVE_DEBOUNCE_MS = 500;
+
+type PendingSave = {
+  state: PersistedWorkspaceStateV1;
+  savedAt: string;
+};
+
+export function autosaveFailureMessage(error: unknown): string {
+  const detail = error instanceof Error && error.message.trim() ? ` (${error.message.trim()})` : "";
+  return `Autosave failed${detail}. Your latest changes are not saved to disk yet; CutList will retry on the next change.`;
+}
 
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => {
@@ -159,7 +172,10 @@ export function useLocalPlaylistDraft(
   const [restored, setRestored] = useState(false);
   const [workspaceRecoveryNotice, setWorkspaceRecoveryNotice] = useState<string | null>(null);
   const [persistenceBlockedByQuarantineFailure, setPersistenceBlockedByQuarantineFailure] = useState(false);
+  const [autosaveError, setAutosaveError] = useState<string | null>(null);
   const skipNextPersist = useRef(false);
+  const pendingSave = useRef<PendingSave | null>(null);
+  const pendingSaveTimer = useRef<number | null>(null);
 
   async function loadDesktopWorkspace(): Promise<PersistedWorkspaceStateV1> {
     let lastError: unknown = null;
@@ -213,9 +229,34 @@ export function useLocalPlaylistDraft(
     setHistory(initialHistory);
   }
 
-  async function persistWorkspaceState(state: PersistedWorkspaceStateV1): Promise<void> {
-    await saveDesktopWorkspaceState(state);
-  }
+  // The restore effect runs once per persistence mode, not on every render, so it reads
+  // the latest applyWorkspaceState through a ref instead of listing it as a dependency.
+  const applyWorkspaceStateRef = useRef(applyWorkspaceState);
+  applyWorkspaceStateRef.current = applyWorkspaceState;
+
+  // Writes whatever autosave has queued, right now. The debounce normally does this half
+  // a second after the last change; the window close and Quit handlers call it directly
+  // so the last edit before quitting is not lost. savedAt only advances once the write
+  // has actually succeeded, and a failure is surfaced instead of swallowed.
+  const flushPendingSave = useCallback(async (): Promise<void> => {
+    if (pendingSaveTimer.current != null) {
+      window.clearTimeout(pendingSaveTimer.current);
+      pendingSaveTimer.current = null;
+    }
+    const pending = pendingSave.current;
+    if (!pending) {
+      return;
+    }
+    pendingSave.current = null;
+    try {
+      await saveDesktopWorkspaceState(pending.state);
+      setSavedAt(pending.savedAt);
+      setAutosaveError(null);
+    } catch (error) {
+      setAutosaveError(autosaveFailureMessage(error));
+      throw error;
+    }
+  }, []);
 
   async function reloadWorkspace() {
     if (options.disablePersistence || options.ignoreStoredDraft) {
@@ -246,7 +287,7 @@ export function useLocalPlaylistDraft(
       }
 
       skipNextPersist.current = true;
-      applyWorkspaceState(workspace, false);
+      applyWorkspaceStateRef.current(workspace, false);
       setRestored(true);
     }
 
@@ -264,22 +305,26 @@ export function useLocalPlaylistDraft(
       skipNextPersist.current = false;
       return;
     }
-    const handle = window.setTimeout(() => {
-      const nextSavedAt = new Date().toISOString();
-      const draft = { playlist, messages, history, curatorPersona: options.curatorPersona, savedAt: nextSavedAt, version: 1 as const };
-      void persistWorkspaceState({
-        version: 1,
-        draft,
-        sessions: sessionSnapshots,
-        activeSessionId
-      });
-      setSavedAt(nextSavedAt);
-    }, 500);
-
-    return () => {
-      window.clearTimeout(handle);
+    const nextSavedAt = new Date().toISOString();
+    const draft = { playlist, messages, history, curatorPersona: options.curatorPersona, savedAt: nextSavedAt, version: 1 as const };
+    pendingSave.current = {
+      state: { version: 1, draft, sessions: sessionSnapshots, activeSessionId },
+      savedAt: nextSavedAt
     };
-  }, [activeSessionId, history, messages, options.curatorPersona, options.disablePersistence, persistenceBlockedByQuarantineFailure, playlist, restored, sessionSnapshots]);
+    if (pendingSaveTimer.current != null) {
+      window.clearTimeout(pendingSaveTimer.current);
+    }
+    pendingSaveTimer.current = window.setTimeout(() => {
+      pendingSaveTimer.current = null;
+      void flushPendingSave().catch(() => undefined);
+    }, AUTOSAVE_DEBOUNCE_MS);
+  }, [activeSessionId, flushPendingSave, history, messages, options.curatorPersona, options.disablePersistence, persistenceBlockedByQuarantineFailure, playlist, restored, sessionSnapshots]);
+
+  useEffect(() => () => {
+    if (pendingSaveTimer.current != null) {
+      window.clearTimeout(pendingSaveTimer.current);
+    }
+  }, []);
 
   function resetDraft() {
     setPlaylist({ ...initialPlaylist, updatedAt: new Date().toISOString() });
@@ -350,6 +395,8 @@ export function useLocalPlaylistDraft(
     setHistory,
     setMessages,
     setPlaylist,
-    workspaceRecoveryNotice
+    workspaceRecoveryNotice,
+    autosaveError,
+    flushPendingSave
   };
 }

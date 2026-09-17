@@ -13,6 +13,7 @@ import type {
   VerifyResponse
 } from "@/types/playlist";
 import type { PersistedWorkspaceStateV1 } from "@/lib/playlist/io/localDraft";
+import type { CuratorPersona, KeychainProvider, LLMProvider } from "@/lib/desktop/settingsSchemas";
 
 // Reported by desktop commands that spawn the Node backend (see classifyBackendError in
 // src/lib/desktop/errors.ts, which is where most of these are actually produced).
@@ -45,15 +46,18 @@ export const desktopCommandNames = {
   getLogPath: "desktop_get_log_path",
   getWorkspaceState: "desktop_get_workspace_state",
   importChat: "desktop_import_chat",
+  openExternalUrl: "desktop_open_external_url",
   planUserRequest: "desktop_plan_user_request",
   playlistMessage: "desktop_playlist_message",
   quarantineWorkspaceState: "desktop_quarantine_workspace_state",
+  quit: "desktop_quit",
   revealInFileManager: "desktop_reveal_in_file_manager",
   saveLlmSetup: "desktop_save_llm_setup",
   saveWorkspaceState: "desktop_save_workspace_state",
   setProviderSecret: "desktop_set_provider_secret",
   deleteProviderSecret: "desktop_delete_provider_secret",
   testLlmSetup: "desktop_test_llm_setup",
+  toggleDevTools: "desktop_toggle_devtools",
   verifyTracks: "desktop_verify_tracks"
 } as const;
 
@@ -61,12 +65,7 @@ export const desktopProgressEventName = "cutlist://curator-progress";
 
 export type DesktopCommandName = (typeof desktopCommandNames)[keyof typeof desktopCommandNames];
 
-export type LLMProvider = "ollama" | "openai" | "gemini" | "none";
-export type CuratorPersona = "razor" | "archivist" | "firestarter";
-
-// Providers whose API key can be stored in the OS keychain. Ollama needs no key and
-// "none" disables the LLM, so neither has a keychain entry.
-export type KeychainProvider = "gemini" | "openai";
+export type { CuratorPersona, KeychainProvider, LLMProvider };
 
 export type LLMSetupStatus = {
   provider: LLMProvider;
@@ -183,6 +182,11 @@ export type DesktopRevealPathPayload = {
   path: string;
 };
 
+// Only URLs on the Rust-side allowlist (the project's GitHub pages) are accepted.
+export type DesktopOpenExternalUrlPayload = {
+  url: string;
+};
+
 export type DesktopBackendPayloadMap = {
   analyzePlaylist: DesktopAnalyzePayload;
   exportPlaylist: DesktopExportPayload;
@@ -190,15 +194,18 @@ export type DesktopBackendPayloadMap = {
   getLogPath: undefined;
   getWorkspaceState: undefined;
   importChat: DesktopImportPayload;
+  openExternalUrl: DesktopOpenExternalUrlPayload;
   planUserRequest: DesktopUserRequestPlanPayload;
   playlistMessage: DesktopPlaylistMessagePayload;
   quarantineWorkspaceState: undefined;
+  quit: undefined;
   revealInFileManager: DesktopRevealPathPayload;
   saveLlmSetup: LLMSetupPayload;
   saveWorkspaceState: DesktopWorkspaceStatePayload;
   setProviderSecret: SetProviderSecretPayload;
   deleteProviderSecret: DeleteProviderSecretPayload;
   testLlmSetup: LLMSetupPayload;
+  toggleDevTools: undefined;
   verifyTracks: DesktopVerifyPayload;
 };
 
@@ -209,9 +216,15 @@ export type DesktopBackendResultMap = {
   getLogPath: DesktopLogPathResult;
   getWorkspaceState: DesktopWorkspaceStateReadResult;
   importChat: ImportChatResponse;
+  openExternalUrl: {
+    ok: true;
+  };
   planUserRequest: ResolvedUserRequestPlan;
   playlistMessage: CuratorResponse;
   quarantineWorkspaceState: DesktopQuarantineWorkspaceStateResult;
+  quit: {
+    ok: true;
+  };
   revealInFileManager: {
     ok: true;
   };
@@ -220,5 +233,8 @@ export type DesktopBackendResultMap = {
   setProviderSecret: SetProviderSecretResult;
   deleteProviderSecret: DeleteProviderSecretResult;
   testLlmSetup: LLMSetupTestResponse;
+  toggleDevTools: {
+    ok: true;
+  };
   verifyTracks: VerifyResponse;
 };

@@ -1,6 +1,7 @@
 import "server-only";
 import { parseJsonResponse } from "@/lib/ai/jsonResponse";
 import { resolveLLMConfig, type EffectiveLLMConfig } from "@/lib/ai/llmConfig";
+import { LLMProviderNotConfiguredError } from "@/lib/ai/providerErrors";
 
 type GeminiPart = {
   text?: string;
@@ -30,7 +31,7 @@ function geminiApiBaseUrl(): string {
 function geminiApiKey(config: EffectiveLLMConfig): string {
   const key = config.geminiApiKey;
   if (!key) {
-    throw new Error("GEMINI_API_KEY is not configured.");
+    throw new LLMProviderNotConfiguredError("gemini");
   }
   return key;
 }

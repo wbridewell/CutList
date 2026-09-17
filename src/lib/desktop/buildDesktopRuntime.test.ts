@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-// @ts-ignore ponytail: test imports the packaging script directly.
+// @ts-expect-error the packaging script is plain ESM with no declaration file; the test imports it directly.
 import { parsePortableMacOSNodeReport, resolveRuntimeNodeSourcePath } from "../../../scripts/build-desktop-runtime.mjs";
 
 describe("build-desktop-runtime", () => {

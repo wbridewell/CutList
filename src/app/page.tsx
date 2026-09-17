@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChatPanel } from "@/components/ChatPanel";
 import { CuratorPersonaButton } from "@/components/CuratorPersonaButton";
 import { LlmSetupButton } from "@/components/LlmSetupButton";
@@ -9,7 +9,9 @@ import { PlaylistPanel } from "@/components/PlaylistPanel";
 import { useLocalPlaylistDraft } from "@/hooks/useLocalPlaylistDraft";
 import { dispatchAppCommand, registerAppCommand, setAppCommandReporter, appCommandIds } from "@/lib/client/appCommands";
 import { ensureDesktopMenu } from "@/lib/client/desktopMenu";
-import { invokeDesktopGetLogPath, revealDesktopPath } from "@/lib/client/desktopApi";
+import { invokeDesktopGetLogPath, openDesktopExternalUrl, requestDesktopQuit, revealDesktopPath, toggleDesktopDevTools } from "@/lib/client/desktopApi";
+import { getTauriWindow, isTauriApp } from "@/lib/client/tauriRuntime";
+import { TextPromptDialog } from "@/components/ui/TextPromptDialog";
 import { saveLLMSetup, type CuratorPersona } from "@/lib/client/llmSetupApi";
 import { useWorkspaceNavigation } from "@/hooks/useWorkspaceNavigation";
 import { activeRejectedCandidateCount, type ChatMessage, type RequestHistoryEntry } from "@/lib/playlist/collaboration";
@@ -34,6 +36,19 @@ const initialMessages: ChatMessage[] = [
 
 const initialHistory: RequestHistoryEntry[] = [];
 
+const helpUrl = "https://github.com/wbridewell/CutList#readme";
+const reportIssueUrl = "https://github.com/wbridewell/CutList/issues/new";
+
+// Inside Tauri, window.open on an external URL is blocked by the CSP or navigates the app
+// away, so the Rust command opens allowlisted project links in the system browser instead.
+async function openExternalUrl(url: string): Promise<void> {
+  if (isTauriApp()) {
+    await openDesktopExternalUrl({ url });
+    return;
+  }
+  window.open(url, "_blank", "noopener,noreferrer");
+}
+
 function latestRejectedCount(history: RequestHistoryEntry[]): number {
   const latestRejectedEntry = [...history].reverse().find((entry) => entry.rejectedCandidates.length > 0);
   return activeRejectedCandidateCount(latestRejectedEntry);
@@ -52,6 +67,7 @@ export default function Home() {
 function Workspace({ useDevFixture }: { useDevFixture: boolean }) {
   const [curatorPersona, setCuratorPersona] = useState<CuratorPersona>("razor");
   const [commandNotice, setCommandNotice] = useState<{ tone: "bad" | "ok"; message: string } | null>(null);
+  const [saveAsPrompt, setSaveAsPrompt] = useState<{ defaultName: string } | null>(null);
 
   function changeCuratorPersona(persona: CuratorPersona, persist: boolean) {
     setCuratorPersona(persona);
@@ -62,7 +78,9 @@ function Workspace({ useDevFixture }: { useDevFixture: boolean }) {
 
   const {
     activeSessionId,
+    autosaveError,
     deleteSession,
+    flushPendingSave,
     history,
     loadSession,
     messages,
@@ -117,6 +135,50 @@ function Workspace({ useDevFixture }: { useDevFixture: boolean }) {
   }, [workspaceRecoveryNotice]);
 
   useEffect(() => {
+    if (autosaveError) {
+      setCommandNotice({ tone: "bad", message: autosaveError });
+    }
+  }, [autosaveError]);
+
+  // Keep the latest flush reachable from listeners that are registered once.
+  const flushPendingSaveRef = useRef(flushPendingSave);
+  flushPendingSaveRef.current = flushPendingSave;
+
+  // Closing the window would otherwise drop any edit made in the last half second, so the
+  // close is intercepted, autosave is flushed, and the window is destroyed explicitly.
+  // Destroying skips this handler, and a failed flush still lets the window close.
+  useEffect(() => {
+    if (!isTauriApp()) {
+      return;
+    }
+    let unlisten: (() => void) | null = null;
+    let cancelled = false;
+    void (async () => {
+      const { getCurrentWindow } = await getTauriWindow();
+      const currentWindow = getCurrentWindow();
+      const dispose = await currentWindow.onCloseRequested(async (event) => {
+        event.preventDefault();
+        try {
+          await flushPendingSaveRef.current();
+        } catch {
+          // The notice has already been shown; do not trap the user in the window.
+        } finally {
+          await currentWindow.destroy();
+        }
+      });
+      if (cancelled) {
+        dispose();
+      } else {
+        unlisten = dispose;
+      }
+    })();
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
+
+  useEffect(() => {
     const unbind = [
       registerAppCommand(appCommandIds.openWorkspace, () => requestUtilitySection("session")),
       registerAppCommand(appCommandIds.importChat, () => {
@@ -125,28 +187,24 @@ function Workspace({ useDevFixture }: { useDevFixture: boolean }) {
       }),
       registerAppCommand(appCommandIds.saveWorkspace, () => saveSession(activeSession?.name)),
       registerAppCommand(appCommandIds.saveWorkspaceAs, () => {
-        const nextName = window.prompt("Save workspace as", activeSession?.name ?? playlist.title ?? "Untitled session");
-        if (nextName == null) {
-          return;
+        setSaveAsPrompt({ defaultName: activeSession?.name ?? playlist.title ?? "Untitled session" });
+      }),
+      registerAppCommand(appCommandIds.toggleDevTools, async () => {
+        await toggleDesktopDevTools();
+      }),
+      registerAppCommand(appCommandIds.showHelp, () => openExternalUrl(helpUrl)),
+      registerAppCommand(appCommandIds.quit, async () => {
+        try {
+          await flushPendingSaveRef.current();
+        } finally {
+          await requestDesktopQuit();
         }
-        saveSession(nextName, { forceNew: true });
-      }),
-      registerAppCommand(appCommandIds.commandPalette, () => {
-        throw new Error("That shortcut is not available in this alpha yet. Use the menu bar for now.");
-      }),
-      registerAppCommand(appCommandIds.toggleDevTools, () => {
-        throw new Error("Developer tools are only available in development builds, not in the normal alpha app.");
-      }),
-      registerAppCommand(appCommandIds.showHelp, () => {
-        window.open("https://github.com/wbridewell/CutList#readme", "_blank", "noopener,noreferrer");
       }),
       registerAppCommand(appCommandIds.showLogs, async () => {
         const { path } = await invokeDesktopGetLogPath();
         await revealDesktopPath({ path });
       }),
-      registerAppCommand(appCommandIds.reportIssue, () => {
-        window.open("https://github.com/wbridewell/CutList/issues/new", "_blank", "noopener,noreferrer");
-      })
+      registerAppCommand(appCommandIds.reportIssue, () => openExternalUrl(reportIssueUrl))
     ];
     return () => {
       for (const dispose of unbind) {
@@ -163,7 +221,7 @@ function Workspace({ useDevFixture }: { useDevFixture: boolean }) {
     <main className="shell">
       <header className="topbar">
         <div className="brand-lockup">
-          <img className="brand-banner" src="/cutlist_banner_app.png" alt="CutList" />
+          <img className="brand-banner" src="/cutlist_banner_app.webp" alt="CutList" />
           <div className="brand">
             <span className="status-kicker">AI summons. You listen.</span>
             <h1>CutList</h1>
@@ -177,6 +235,19 @@ function Workspace({ useDevFixture }: { useDevFixture: boolean }) {
         </div>
       </header>
       {commandNotice ? <p className={commandNotice.tone}>{commandNotice.message}</p> : null}
+      {saveAsPrompt ? (
+        <TextPromptDialog
+          confirmLabel="Save"
+          defaultValue={saveAsPrompt.defaultName}
+          label="Session name"
+          title="Save workspace as"
+          onCancel={() => setSaveAsPrompt(null)}
+          onConfirm={(name) => {
+            setSaveAsPrompt(null);
+            saveSession(name, { forceNew: true });
+          }}
+        />
+      ) : null}
       <nav className="mobile-switcher" aria-label="Workspace views">
         <button
           aria-pressed={mobileView === "playlist"}

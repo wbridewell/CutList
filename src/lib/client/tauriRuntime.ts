@@ -19,3 +19,11 @@ export async function getTauriEvent() {
 export async function getTauriMenu() {
   return import("@tauri-apps/api/menu");
 }
+
+export async function getTauriApp() {
+  return import("@tauri-apps/api/app");
+}
+
+export async function getTauriWindow() {
+  return import("@tauri-apps/api/window");
+}

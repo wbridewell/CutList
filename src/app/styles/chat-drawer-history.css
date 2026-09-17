@@ -1054,6 +1054,17 @@
   color: var(--muted);
 }
 
+.dialog-field {
+  display: grid;
+  gap: 0.4rem;
+  margin-top: 0.6rem;
+}
+
+.dialog-field span {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
 .dialog-actions {
   justify-content: flex-end;
   margin-top: 1rem;

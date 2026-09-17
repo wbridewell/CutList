@@ -56,7 +56,7 @@ The core product rule is that the LLM proposes, metadata providers verify, deter
 - The provider can be selected with `LLM_PROVIDER`.
 - Supported provider modes are `ollama`, `openai`, `gemini`, and `none`.
 - `none` is deterministic and useful for tests, demos, and constrained local work.
-- Ollama is the default local development path.
+- Gemini is the code default; Ollama is the local, key-free option.
 - OpenAI support uses the `openai` npm package.
 - Gemini support is implemented in the provider layer without adding a separate package dependency.
 
@@ -123,10 +123,10 @@ Import-from-chat behavior is exposed through the playlist API and supporting pla
 
 - Vitest is the test runner.
 - Tests run in a Node environment.
-- React component tests use Testing Library.
+- React component tests render to static markup with react-dom/server and assert on the HTML.
 - The default test command includes `src/**/*.test.ts` and excludes live provider tests.
 - The prompt harness has its own Vitest config in `vitest.prompt-harness.config.ts`.
-- `npm run lint` currently aliases `npm run typecheck`; there is no separate ESLint configuration yet.
+- `npm run lint` runs ESLint (`eslint.config.mjs`, Next.js core-web-vitals and TypeScript rule sets).
 
 Common commands:
 
@@ -137,14 +137,14 @@ Common commands:
 - `npm run prompt:harness`: run live prompt harness tests against a configured provider.
 - `npm run eval:cross-cutting`: run the dated cross-workflow evaluation pack on top of the prompt/review harness layer.
 - `npm run typecheck`: run TypeScript without emitting files.
-- `npm run lint`: run the current lint placeholder, which is type checking.
+- `npm run lint`: run ESLint.
 - `npm run build`: build the static frontend used by the desktop app.
 - `npm run build:dmg`: build the macOS DMG release package and bundled desktop runtime.
 
 ## Security Posture
 
 - LLM and metadata provider calls stay in the trusted desktop backend.
-- Secrets belong in `.env.local`, shell environment variables, or deployment secret storage.
+- Cloud provider keys belong in the OS keychain via the in-app `LLM setup` dialog. Shell environment variables and, in development builds, `.env.local` are debug overrides only.
 - Request bodies are size-limited and schema-validated.
 - API errors avoid exposing internal exception details.
 - `next.config.ts` sets baseline security headers.

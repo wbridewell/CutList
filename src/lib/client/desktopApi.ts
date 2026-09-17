@@ -7,6 +7,7 @@ import {
   type DesktopBackendResultMap,
   type DesktopErrorCode,
   type DesktopExportResult,
+  type DesktopOpenExternalUrlPayload,
   type DesktopProgressPayload,
   type DesktopPlaylistMessagePayload,
   type DesktopRevealPathPayload,
@@ -159,6 +160,24 @@ export function revealDesktopPath(payload: DesktopRevealPathPayload) {
   return getTauriCore().then(({ invoke }) =>
     invoke<DesktopBackendResultMap["revealInFileManager"]>(desktopCommandNames.revealInFileManager, payload)
   );
+}
+
+export function openDesktopExternalUrl(payload: DesktopOpenExternalUrlPayload) {
+  return getTauriCore().then(({ invoke }) =>
+    invoke<DesktopBackendResultMap["openExternalUrl"]>(desktopCommandNames.openExternalUrl, payload)
+  );
+}
+
+export function toggleDesktopDevTools() {
+  return getTauriCore().then(({ invoke }) =>
+    invoke<DesktopBackendResultMap["toggleDevTools"]>(desktopCommandNames.toggleDevTools)
+  );
+}
+
+// Exits the process. Callers flush autosave first; the predefined Quit menu item would
+// have exited without giving the webview a chance to do that.
+export function requestDesktopQuit() {
+  return getTauriCore().then(({ invoke }) => invoke<DesktopBackendResultMap["quit"]>(desktopCommandNames.quit));
 }
 
 export function invokeDesktopQuarantineWorkspaceState() {

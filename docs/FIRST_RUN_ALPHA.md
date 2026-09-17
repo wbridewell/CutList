@@ -7,6 +7,7 @@ For the full tester handoff, see [ALPHA_TEST_GUIDE.md](ALPHA_TEST_GUIDE.md).
 ## What You Need
 
 - Node.js and npm
+- The Rust toolchain from [rustup.rs](https://rustup.rs/) and the Xcode Command Line Tools, because this path builds the desktop shell from source. If you would rather not install these, ask for the DMG build described in [ALPHA_TEST_GUIDE.md](ALPHA_TEST_GUIDE.md) instead.
 - A Gemini API key from Google AI Studio
 - This project folder
 
@@ -38,7 +39,7 @@ npm run first-run
 
 The first launch may install dependencies. When the app opens, use the `LLM setup` button in the top-right, choose `Gemini`, paste your Gemini API key, and click `Save and test`. You can also choose a machine-local `Curator persona` next to it if you want the Curator to sound more cutting, more historical, or more dramatic.
 
-The key is saved only on your machine in the desktop app-data settings store.
+The key is saved only on your machine, in the macOS Keychain.
 Keep the Terminal window open while the app is running.
 
 ## Start It Later

@@ -16,9 +16,10 @@ Use the CutList brand assets as the north star: The Curator, a friendly hooded n
 
 Brand asset roles:
 
-- `public/cutlist_little_guy.png`: The Curator mascot for app icon moments, empty states, compact brand moments, and assistant identity.
-- `public/cutlist_banner_simple_transparent.png`: app header and compact horizontal lockup.
-- `public/cutlist_banner_full.png`: README, docs, project presentation, and large brand surfaces.
+- `assets/brand/cutlist_little_guy.png`: The Curator mascot source for app icon moments and large brand surfaces. The in-app mascot is `public/cutlist_mascot_app.*`.
+- `assets/brand/cutlist_banner_simple_transparent.png` and `assets/brand/cutlist_banner_full.png`: banner sources for docs and project presentation. The in-app header is `public/cutlist_banner_app.*`.
+
+Only files under `public/` ship in the desktop bundle; `assets/brand/` holds sources that the app does not load.
 
 Good references:
 

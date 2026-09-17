@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ExportMenu } from "@/components/ExportMenu";
 import { PlaylistRulesDisclosure } from "@/components/PlaylistRulesDisclosure";
 import { TrackCard } from "@/components/TrackCard";
@@ -104,7 +104,9 @@ export function PlaylistPanel({
     return exportFormatRegistry.find((format) => format.id === selectedFormat)?.label ?? "Export";
   }
 
-  function exportWithFormat(format: PlaylistExportFormat) {
+  // Stable per playlist so the app-command registration effect below does not re-run on
+  // every render.
+  const exportWithFormat = useCallback((format: PlaylistExportFormat) => {
     return async () => {
       setSelectedFormat(format);
       setOutputStatus(null);
@@ -118,7 +120,7 @@ export function PlaylistPanel({
       const label = exportFormatRegistry.find((item) => item.id === format)?.label ?? "export";
       setOutputStatus({ tone: "ok", message: `Exported ${label}.` });
     };
-  }
+  }, [playlist]);
 
   function containingFolder(path: string): string {
     const separatorIndex = Math.max(path.lastIndexOf("/"), path.lastIndexOf("\\"));
@@ -223,14 +225,14 @@ export function PlaylistPanel({
 
   const exportPlaylist = exportWithFormat(selectedFormat);
 
-  async function revealOutput() {
+  const revealOutput = useCallback(async () => {
     if (!lastExportPath) {
       setOutputStatus({ tone: "bad", message: "Export a playlist first, then use Reveal Output to open it." });
       return;
     }
     await revealDesktopPath({ path: lastExportPath });
     setOutputStatus({ tone: "ok", message: `${labelForCommand(appCommandIds.revealOutput)}.` });
-  }
+  }, [lastExportPath]);
 
   useEffect(() => {
     const unbind = [
@@ -252,7 +254,7 @@ export function PlaylistPanel({
         dispose();
       }
     };
-  }, [lastExportPath, playlist, selectedFormat]);
+  }, [exportPlaylist, exportWithFormat, lastExportPath, playlist, revealOutput, selectedFormat]);
 
   const {
     constraintPresentation,
@@ -398,7 +400,7 @@ export function PlaylistPanel({
         <div className="playlist-track-scroll">
           {playlist.tracks.length === 0 ? (
             <div className="empty-state">
-              <img src="/cutlist_mascot_app.png" alt="" />
+              <img src="/cutlist_mascot_app.webp" alt="" />
               <div>
                 <strong>No tracks yet.</strong>
                 <p>Start by describing the playlist you want in the Curator Console. Import a draft or verify seed tracks when you already know the songs. Nothing joins the list until it is verified.</p>

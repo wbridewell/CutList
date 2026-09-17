@@ -2,7 +2,7 @@
 
 import { appCommandIds, dispatchAppCommand, exportCommandId, labelForCommand, type AppCommandId } from "@/lib/client/appCommands";
 import { exportFormatRegistry } from "@/lib/playlist/io/exports";
-import { isTauriApp } from "@/lib/client/tauriRuntime";
+import { getTauriApp, isTauriApp } from "@/lib/client/tauriRuntime";
 
 let setupPromise: Promise<void> | null = null;
 
@@ -29,6 +29,10 @@ export async function ensureDesktopMenu(): Promise<void> {
     // We keep menu setup in JS because the shared command registry also lives in JS,
     // so menu clicks can reuse the exact same command IDs as the React controls.
     const { Menu, PredefinedMenuItem, Submenu } = await import("@tauri-apps/api/menu");
+    // Comes from tauri.conf.json, which reads package.json, so the About box can never
+    // drift from the bundle version again.
+    const { getVersion } = await getTauriApp();
+    const version = await getVersion();
 
     const separator = () => PredefinedMenuItem.new({ item: "Separator" });
     const services = await PredefinedMenuItem.new({ item: "Services" });
@@ -37,7 +41,6 @@ export async function ensureDesktopMenu(): Promise<void> {
     const showAll = await PredefinedMenuItem.new({ item: "ShowAll" });
     const bringAllToFront = await PredefinedMenuItem.new({ item: "BringAllToFront" });
     const closeWindow = await PredefinedMenuItem.new({ item: "CloseWindow" });
-    const quit = await PredefinedMenuItem.new({ item: "Quit" });
     const undo = await PredefinedMenuItem.new({ item: "Undo" });
     const redo = await PredefinedMenuItem.new({ item: "Redo" });
     const cut = await PredefinedMenuItem.new({ item: "Cut" });
@@ -52,7 +55,7 @@ export async function ensureDesktopMenu(): Promise<void> {
           copyright: "Will Bridewell",
           license: "MIT",
           name: "CutList",
-          version: "0.1.5",
+          version,
           website: "https://github.com/wbridewell/CutList",
           websiteLabel: "GitHub"
         }
@@ -82,7 +85,8 @@ export async function ensureDesktopMenu(): Promise<void> {
         await separator(),
         bringAllToFront,
         await separator(),
-        quit
+        // A custom item rather than the predefined Quit so the app can flush autosave first.
+        commandItem(appCommandIds.quit, labelForCommand(appCommandIds.quit), "CmdOrCtrl+Q")
       ]
     });
 
@@ -107,8 +111,7 @@ export async function ensureDesktopMenu(): Promise<void> {
 
     const viewItems = [
       commandItem(appCommandIds.toggleSidebar, labelForCommand(appCommandIds.toggleSidebar), "CmdOrCtrl+\\"),
-      commandItem(appCommandIds.toggleInspector, labelForCommand(appCommandIds.toggleInspector), "CmdOrCtrl+I"),
-      commandItem(appCommandIds.commandPalette, labelForCommand(appCommandIds.commandPalette), "CmdOrCtrl+Shift+P")
+      commandItem(appCommandIds.toggleInspector, labelForCommand(appCommandIds.toggleInspector), "CmdOrCtrl+I")
     ];
 
     if (process.env.NODE_ENV === "development") {

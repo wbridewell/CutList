@@ -1,5 +1,3 @@
-import { isLLMDisabledError, isLLMTimeoutError } from "@/lib/ai/errors";
-import { isModelShapeError } from "@/lib/ai/modelErrors";
 import { getLLMProvider } from "@/lib/ai/llmClient";
 import { instructionIntentPrompt } from "@/lib/ai/prompts";
 import { attemptLlmContract } from "@/lib/ai/services/llmService";
@@ -90,7 +88,7 @@ export function reconcileDurationPolarity(
     deterministicConstraints.maxTrackDurationMs == null &&
     constraints.maxTrackDurationMs === deterministicConstraints.minTrackDurationMs
   ) {
-    const { maxTrackDurationMs, ...rest } = constraints;
+    const { maxTrackDurationMs: _droppedMax, ...rest } = constraints;
     return rest;
   }
 
@@ -99,7 +97,7 @@ export function reconcileDurationPolarity(
     deterministicConstraints.minTrackDurationMs == null &&
     constraints.minTrackDurationMs === deterministicConstraints.maxTrackDurationMs
   ) {
-    const { minTrackDurationMs, ...rest } = constraints;
+    const { minTrackDurationMs: _droppedMin, ...rest } = constraints;
     return rest;
   }
 

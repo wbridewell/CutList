@@ -160,10 +160,6 @@ function isConstraintDeclaration(userMessage: string): boolean {
     /\b(?:make|set)\s+(?:a\s+)?(?:constraint|rule)\b/i.test(userMessage);
 }
 
-function isEditSuggestionRequest(userMessage: string): boolean {
-  return /\bsuggest\s+(?:cuts?|removals?|deletions?|drops?|edits?)\b/i.test(userMessage);
-}
-
 function hasConstraintCleanupLanguage(userMessage: string): boolean {
   return /\b(remove|delete|drop|cut|prune|clear)\b/i.test(userMessage) ||
     /\bcuts\b/i.test(userMessage) ||

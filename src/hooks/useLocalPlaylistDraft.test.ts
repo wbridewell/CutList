@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decideWorkspaceLoad, recoveryNoticeMessage, workspaceLoadOutcomeAfterQuarantine } from "@/hooks/useLocalPlaylistDraft";
+import { autosaveFailureMessage, decideWorkspaceLoad, recoveryNoticeMessage, workspaceLoadOutcomeAfterQuarantine } from "@/hooks/useLocalPlaylistDraft";
 import type { DesktopWorkspaceStateReadResult } from "@/lib/desktop/contracts";
 import type { PlaylistState } from "@/types/playlist";
 
@@ -94,5 +94,20 @@ describe("workspaceLoadOutcomeAfterQuarantine", () => {
 
     expect(outcome.persistenceBlocked).toBe(true);
     expect(outcome.notice).toContain("Autosave is paused");
+  });
+});
+
+describe("autosaveFailureMessage", () => {
+  it("includes the underlying error so the user can report it", () => {
+    const message = autosaveFailureMessage(new Error("EACCES: permission denied"));
+
+    expect(message).toContain("Autosave failed (EACCES: permission denied)");
+    expect(message).toContain("not saved to disk yet");
+  });
+
+  it("stays readable when the failure carries no message", () => {
+    expect(autosaveFailureMessage(undefined)).toBe(
+      "Autosave failed. Your latest changes are not saved to disk yet; CutList will retry on the next change."
+    );
   });
 });

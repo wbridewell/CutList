@@ -149,7 +149,7 @@ Smoke-test the DMG on a clean macOS user account or another Mac:
 5. Import or verify one draft/seed track list.
 6. Export one playlist file.
 7. Quit and relaunch the app.
-8. Confirm the local draft and settings are still present.
+8. Confirm the local draft and settings are still present, and that `LLM setup` still reports the API key as stored in the keychain. A key that disappears on relaunch means the app was built without the `apple-native` keyring feature.
 9. Open `Help > Show Logs in Finder` and confirm `cutlist.log` exists and contains command entries with no visible API keys.
 
 ## Security Notes
